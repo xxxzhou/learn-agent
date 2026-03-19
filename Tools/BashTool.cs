@@ -26,17 +26,29 @@ public class BashTool : ITool
     
     public Task<string> ExecuteAsync(string argumentsJson)
     {
-        var args = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(argumentsJson);
-        var command = args?.GetValueOrDefault("command").GetString() ?? "";
-        
-        // 命令安全检查
-        var (isSafe, error) = security.CheckCommand(command);
-        if (!isSafe)
+        try
         {
-            return Task.FromResult($"Error: {error}");
-        }
+            var args = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(argumentsJson);
+            
+            string command = "";
+            if (args != null && args.TryGetValue("command", out var cmdElement))
+            {
+                command = cmdElement.GetString() ?? "";
+            }
         
-        return Task.FromResult(RunCommand(command));
+            // 命令安全检查
+            var (isSafe, error) = security.CheckCommand(command);
+            if (!isSafe)
+            {
+                return Task.FromResult($"Error: {error}");
+            }
+            
+            return Task.FromResult(RunCommand(command));
+        }
+        catch (Exception ex)
+        {
+            return Task.FromResult($"Error: {ex.Message}");
+        }
     }
     
     private string RunCommand(string command)

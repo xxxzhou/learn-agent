@@ -25,24 +25,37 @@ public class WriteFileTool : ITool
     
     public Task<string> ExecuteAsync(string argumentsJson)
     {
-        var args = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(argumentsJson);
-        var filePath = args?.GetValueOrDefault("file_path").GetString() ?? "";
-        var content = args?.GetValueOrDefault("content").GetString() ?? "";
-        
-        if (string.IsNullOrEmpty(filePath))
-        {
-            return Task.FromResult("Error: file_path is required");
-        }
-        
-        // 路径安全检查
-        var (isValid, fullPath, error) = security.ValidatePath(filePath);
-        if (!isValid)
-        {
-            return Task.FromResult($"Error: {error}");
-        }
-        
         try
         {
+            var args = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(argumentsJson);
+            
+            string filePath = "";
+            string content = "";
+            
+            if (args != null)
+            {
+                if (args.TryGetValue("file_path", out var pathElement))
+                {
+                    filePath = pathElement.GetString() ?? "";
+                }
+                if (args.TryGetValue("content", out var contentElement))
+                {
+                    content = contentElement.GetString() ?? "";
+                }
+            }
+        
+            if (string.IsNullOrEmpty(filePath))
+            {
+                return Task.FromResult("Error: file_path is required");
+            }
+            
+            // 路径安全检查
+            var (isValid, fullPath, error) = security.ValidatePath(filePath);
+            if (!isValid)
+            {
+                return Task.FromResult($"Error: {error}");
+            }
+            
             var directory = Path.GetDirectoryName(fullPath);
             if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
             {

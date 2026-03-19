@@ -59,33 +59,24 @@ public class SecurityService
     }
     
     /// <summary>
-    /// 验证路径是否在工作目录内（防止路径逃逸）
+    /// 验证路径（允许绝对路径，但阻止危险扩展名）
     /// </summary>
     public (bool isValid, string fullPath, string error) ValidatePath(string relativePath)
     {
         try
         {
-            // 处理相对路径
+            // 处理路径
             string fullPath;
             
             if (Path.IsPathRooted(relativePath))
             {
+                // 绝对路径直接使用（规范化）
                 fullPath = Path.GetFullPath(relativePath);
             }
             else
             {
+                // 相对路径基于工作目录
                 fullPath = Path.GetFullPath(Path.Combine(workDirectory, relativePath));
-            }
-            
-            // 检查是否在工作目录内
-            var workDirWithSeparator = workDirectory.EndsWith(Path.DirectorySeparatorChar) 
-                ? workDirectory 
-                : workDirectory + Path.DirectorySeparatorChar;
-            
-            if (!fullPath.StartsWith(workDirWithSeparator, StringComparison.OrdinalIgnoreCase) && 
-                !fullPath.Equals(workDirectory, StringComparison.OrdinalIgnoreCase))
-            {
-                return (false, "", $"Path escapes workspace: {relativePath}");
             }
             
             // 检查危险文件扩展名

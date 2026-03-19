@@ -25,24 +25,37 @@ public class ReadFileTool : ITool
     
     public Task<string> ExecuteAsync(string argumentsJson)
     {
-        var args = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(argumentsJson);
-        var filePath = args?.GetValueOrDefault("file_path").GetString() ?? "";
-        var limit = args?.GetValueOrDefault("limit").GetInt32() ?? 0;
-        
-        if (string.IsNullOrEmpty(filePath))
-        {
-            return Task.FromResult("Error: file_path is required");
-        }
-        
-        // 路径安全检查
-        var (isValid, fullPath, error) = security.ValidatePath(filePath);
-        if (!isValid)
-        {
-            return Task.FromResult($"Error: {error}");
-        }
-        
         try
         {
+            var args = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(argumentsJson);
+            
+            string filePath = "";
+            int limit = 0;
+            
+            if (args != null)
+            {
+                if (args.TryGetValue("file_path", out var pathElement))
+                {
+                    filePath = pathElement.GetString() ?? "";
+                }
+                if (args.TryGetValue("limit", out var limitElement))
+                {
+                    limit = limitElement.GetInt32();
+                }
+            }
+        
+            if (string.IsNullOrEmpty(filePath))
+            {
+                return Task.FromResult("Error: file_path is required");
+            }
+            
+            // 路径安全检查
+            var (isValid, fullPath, error) = security.ValidatePath(filePath);
+            if (!isValid)
+            {
+                return Task.FromResult($"Error: {error}");
+            }
+            
             if (!File.Exists(fullPath))
             {
                 return Task.FromResult($"Error: File not found: {fullPath}");

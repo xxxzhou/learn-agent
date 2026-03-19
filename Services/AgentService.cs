@@ -15,6 +15,10 @@ public class AgentService
     private readonly List<ChatMessage> messages;
     private readonly string? systemPrompt;
     
+    // Nag reminder: 追踪未更新 todo 的轮数
+    private int roundsSinceTodo = 0;
+    private const int MaxRoundsWithoutTodo = 3;
+    
     public AgentService(ILLMClient client, ToolRegistry toolRegistry, string modelId, string? systemPrompt = null)
     {
         this.client = client;
@@ -97,17 +101,42 @@ public class AgentService
             // 检查大模型是否需要调用工具,如果有工具执行,等工具执行完返回再提交
             if (assistantMessage.ToolCalls != null && assistantMessage.ToolCalls.Count > 0)
             {
+                var usedTodo = false;
+                var toolResults = new List<ChatMessage>();
+                
                 foreach (var toolCall in assistantMessage.ToolCalls)
                 {
                     var result = await ExecuteToolCallAsync(toolCall);
                     
-                    messages.Add(new ChatMessage
+                    // 检查是否使用了 todo 工具
+                    if (toolCall.Function?.Name == "todo")
+                    {
+                        usedTodo = true;
+                    }
+                    
+                    toolResults.Add(new ChatMessage
                     {
                         Role = "tool",
                         Content = result,
                         ToolCallId = toolCall.Id
                     });
                 }
+                
+                // Nag reminder: 如果连续多轮未更新 todo，注入提醒
+                roundsSinceTodo = usedTodo ? 0 : roundsSinceTodo + 1;
+                if (roundsSinceTodo >= MaxRoundsWithoutTodo)
+                {
+                    // 在工具结果前插入提醒
+                    messages.Add(new ChatMessage
+                    {
+                        Role = "user",
+                        Content = "<reminder>Update your todos to track progress.</reminder>"
+                    });
+                    roundsSinceTodo = 0; // 重置计数器
+                }
+                
+                // 添加工具结果到历史
+                messages.AddRange(toolResults);
                 continue;
             }
             
@@ -136,13 +165,11 @@ public class AgentService
         var toolName = toolCall.Function.Name;
         var arguments = toolCall.Function.Arguments;
         
-        Console.ForegroundColor = ConsoleColor.Yellow;
-        Console.WriteLine($"$ {toolName}({arguments})");
-        Console.ResetColor();
+        ConsoleLogger.Tool(toolName, arguments);
         
         var result = await toolRegistry.ExecuteAsync(toolName, arguments);
         
-        Console.WriteLine(result.Length > 200 ? result[..200] + "..." : result);
+        ConsoleLogger.ToolResult(result);
         
         return result;
     }
