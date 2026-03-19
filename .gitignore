@@ -82,7 +82,7 @@ TestResults/
 
 # Environment files - IMPORTANT: Protect your API keys!
 .env
-.env.*
+.env_*
 *.env
 .env.local
 .env.*.local
