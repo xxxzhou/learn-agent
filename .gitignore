@@ -20,13 +20,6 @@ x86/
 # VS Code
 .vscode/
 
-# User-specific files
-*.rsuser
-*.suo
-*.user
-*.userosscache
-*.sln.docstates
-
 # Build results
 [Dd]ebug/
 [Dd]ebugPublic/
@@ -87,12 +80,12 @@ TestResults/
 *.svclog
 *.scc
 
-# Environment files
+# Environment files - IMPORTANT: Protect your API keys!
 .env
 .env.*
+*.env
 .env.local
 .env.*.local
-*.env
 
 # OS generated files
 .DS_Store
