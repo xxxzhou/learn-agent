@@ -173,21 +173,33 @@ public static class ConsoleLogger
         // 内容
         Console.ForegroundColor = ConsoleColor.White;
         
-        // 多行内容缩进处理
-        var lines = content.Split('\n');
-        for (int i = 0; i < lines.Length; i++)
+        // 确保内容不是 null
+        content ??= "";
+        
+        // 多行内容缩进处理 - 使用 StringReader 更安全
+        using var reader = new System.IO.StringReader(content);
+        string? line;
+        bool firstLine = true;
+        while ((line = reader.ReadLine()) != null)
         {
-            if (i > 0)
+            if (!firstLine)
             {
                 Console.Write(new string(' ', 10)); // 缩进对齐
             }
+            firstLine = false;
             
-            var line = lines[i];
+            // 安全截断 - 按字符数而非字节数
             if (line.Length > 80)
             {
-                line = line[..80] + "...";
+                line = line.Substring(0, 80) + "...";
             }
             Console.WriteLine(line);
+        }
+        
+        // 如果内容为空，打印空行
+        if (firstLine)
+        {
+            Console.WriteLine("(empty)");
         }
         
         Console.ResetColor();

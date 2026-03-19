@@ -45,12 +45,17 @@ public class ConfigService
     
     private void LoadFromEnvironment()
     {
-        ApiKey = Environment.GetEnvironmentVariable("ANTHROPIC_API_KEY") 
+        // 读取 API Key（支持多种环境变量名）
+        ApiKey = Environment.GetEnvironmentVariable("API_KEY")
+            ?? Environment.GetEnvironmentVariable("ANTHROPIC_API_KEY") 
             ?? Environment.GetEnvironmentVariable("OPENAI_API_KEY") 
             ?? "";
         
         ModelId = Environment.GetEnvironmentVariable("MODEL_ID") ?? "glm-4";
-        BaseUrl = Environment.GetEnvironmentVariable("ANTHROPIC_BASE_URL") 
+        
+        // 读取 Base URL（支持多种环境变量名）
+        BaseUrl = Environment.GetEnvironmentVariable("API_BASE_URL")
+            ?? Environment.GetEnvironmentVariable("ANTHROPIC_BASE_URL") 
             ?? Environment.GetEnvironmentVariable("OPENAI_BASE_URL");
         
         SystemPrompt = @"You have access to these tools. You MUST call them directly when needed:

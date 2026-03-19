@@ -31,8 +31,8 @@ public class Program
             SetConsoleMode(handle, ENABLE_VIRTUAL_TERMINAL_PROCESSING | ENABLE_PROCESSED_OUTPUT);
         }
         
-        Console.WriteLine("=== Learn Agent - s03 Todo Write ===");
-        Console.WriteLine("任务规划与进度跟踪");
+        Console.WriteLine("=== Learn Agent - s04 Subagent ===");
+        Console.WriteLine("子代理上下文隔离");
         Console.WriteLine();
 
         // 加载配置
@@ -58,7 +58,7 @@ public class Program
         // 创建 Todo 管理器
         var todoManager = new TodoManager();
         
-        // 创建工具注册表（注入依赖）
+        // 创建工具注册表（先不注册 TaskTool）
         var toolRegistry = new ToolRegistry()
             .Register(new BashTool(security))
             .Register(new ReadFileTool(security))
@@ -68,10 +68,24 @@ public class Program
         // 创建客户端
         using var client = ClientFactory.Create(config);
         
-        // 更新系统提示，鼓励使用 todo 工具
+        // 创建子代理服务
+        var subagentService = new SubagentService(
+            client, 
+            toolRegistry, 
+            config.ModelId,
+            security.GetWorkDirectory());
+        
+        // 注册 Task 工具（需要子代理服务）
+        toolRegistry.Register(new TaskTool(subagentService));
+        
+        // 更新系统提示，鼓励使用 task 工具委派子任务
         var systemPrompt = config.SystemPrompt + 
-            " Use the todo tool to plan and track progress on multi-step tasks. " +
-            "Mark tasks as in_progress before starting, and completed when done.";
+            "\n\nIMPORTANT INSTRUCTIONS:\n" +
+            "1. Use the 'task' tool when you need to explore files, search code, or do complex analysis.\n" +
+            "   Example: task(prompt=\"Search all .cs files for TODO comments\", description=\"Search TODOs\")\n" +
+            "2. The task tool creates a subagent with fresh context - use it to keep your context clean.\n" +
+            "3. Use the 'todo' tool to track progress on multi-step tasks.\n" +
+            "4. Do NOT repeat the same action multiple times.";
         
         // 创建 Agent 服务
         var agent = new AgentService(client, toolRegistry, config.ModelId, systemPrompt);
@@ -80,7 +94,7 @@ public class Program
         while (true)
         {
             Console.ForegroundColor = ConsoleColor.Cyan;
-            Console.Write("s03 >> ");
+            Console.Write("s04 >> ");
             Console.ResetColor();
             
             var input = Console.ReadLine();

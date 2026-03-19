@@ -22,9 +22,19 @@ public class OpenAIClient : ILLMClient
     {
         // 清理 API Key，移除可能的空白字符
         this.apiKey = apiKey.Trim();
-        httpClient = new HttpClient
+        
+        // 配置 HttpClientHandler 以支持 SSL 和代理
+        var handler = new HttpClientHandler
         {
-            Timeout = TimeSpan.FromMinutes(5) // 设置超时为 5 分钟
+            // 允许所有 SSL 证书（开发环境）
+            ServerCertificateCustomValidationCallback = (message, cert, chain, errors) => true,
+            // 自动解压缩
+            AutomaticDecompression = System.Net.DecompressionMethods.GZip | System.Net.DecompressionMethods.Deflate
+        };
+        
+        httpClient = new HttpClient(handler)
+        {
+            Timeout = TimeSpan.FromSeconds(60) // 设置超时为 60 秒
         };
         customEndpoint = null;
         
@@ -38,6 +48,12 @@ public class OpenAIClient : ILLMClient
             httpClient.BaseAddress = new Uri(baseUrl);
             customEndpoint = "/api/paas/v4/chat/completions";
         }
+        else if (baseUrl.Contains("codebuddy.ai") || baseUrl.Contains("copilot.tencent.com"))
+        {
+            // CodeBuddy API (国际版/国内版)
+            httpClient.BaseAddress = new Uri(baseUrl);
+            customEndpoint = "/v1/chat/completions";
+        }
         else
         {
             httpClient.BaseAddress = new Uri(baseUrl);
@@ -49,7 +65,8 @@ public class OpenAIClient : ILLMClient
         var options = new JsonSerializerOptions
         {
             DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-            PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower
+            PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
+            Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping
         };
         
         var json = JsonSerializer.Serialize(request, options);
