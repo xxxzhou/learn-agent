@@ -1,4 +1,5 @@
 using System.Text.Json;
+using LearnAgent.Services;
 
 namespace LearnAgent.Tools;
 
@@ -10,9 +11,17 @@ public class WriteFileTool : ITool
     public string Name => "write_file";
     
     public string Description => 
-        "Write text content to a file. Creates the file if it doesn't exist, overwrites if it does. " +
-        "Parameters: file_path (string) - the path where to write, content (string) - the text to write. " +
-        "Example: write_file with file_path='test.txt' and content='Hello World'.";
+        "Write text content to a file safely. " +
+        "Parameters: file_path (string) - the path (relative to workspace), " +
+        "content (string) - the text to write. " +
+        "Path escaping (../) and dangerous extensions (.exe, .bat, etc.) are blocked.";
+    
+    private readonly SecurityService security;
+    
+    public WriteFileTool(SecurityService security)
+    {
+        this.security = security;
+    }
     
     public Task<string> ExecuteAsync(string argumentsJson)
     {
@@ -25,16 +34,23 @@ public class WriteFileTool : ITool
             return Task.FromResult("Error: file_path is required");
         }
         
+        // 路径安全检查
+        var (isValid, fullPath, error) = security.ValidatePath(filePath);
+        if (!isValid)
+        {
+            return Task.FromResult($"Error: {error}");
+        }
+        
         try
         {
-            var directory = Path.GetDirectoryName(filePath);
+            var directory = Path.GetDirectoryName(fullPath);
             if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
             {
                 Directory.CreateDirectory(directory);
             }
             
-            File.WriteAllText(filePath, content);
-            return Task.FromResult($"Successfully wrote to {filePath}");
+            File.WriteAllText(fullPath, content);
+            return Task.FromResult($"Successfully wrote {content.Length} characters to {filePath}");
         }
         catch (Exception ex)
         {

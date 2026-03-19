@@ -1,4 +1,5 @@
 using System.Text.Json;
+using LearnAgent.Services;
 
 namespace LearnAgent.Tools;
 
@@ -10,29 +11,58 @@ public class ReadFileTool : ITool
     public string Name => "read_file";
     
     public string Description => 
-        "Read the contents of a file and return it as text. " +
-        "Parameters: file_path (string) - the path to the file to read. " +
-        "Example: read_file with file_path='config.txt' returns the file contents.";
+        "Read the contents of a file safely. " +
+        "Parameters: file_path (string) - the path to the file (relative to workspace), " +
+        "limit (optional int) - max lines to read. " +
+        "Path escaping (../) is blocked. Output truncated at 50000 characters.";
+    
+    private readonly SecurityService security;
+    
+    public ReadFileTool(SecurityService security)
+    {
+        this.security = security;
+    }
     
     public Task<string> ExecuteAsync(string argumentsJson)
     {
         var args = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(argumentsJson);
         var filePath = args?.GetValueOrDefault("file_path").GetString() ?? "";
+        var limit = args?.GetValueOrDefault("limit").GetInt32() ?? 0;
         
         if (string.IsNullOrEmpty(filePath))
         {
             return Task.FromResult("Error: file_path is required");
         }
         
+        // 路径安全检查
+        var (isValid, fullPath, error) = security.ValidatePath(filePath);
+        if (!isValid)
+        {
+            return Task.FromResult($"Error: {error}");
+        }
+        
         try
         {
-            if (!File.Exists(filePath))
+            if (!File.Exists(fullPath))
             {
-                return Task.FromResult($"Error: File not found: {filePath}");
+                return Task.FromResult($"Error: File not found: {fullPath}");
             }
             
-            var content = File.ReadAllText(filePath);
-            return Task.FromResult(content.Length > 50000 ? content[..50000] + "\n... (truncated)" : content);
+            var content = File.ReadAllText(fullPath);
+            
+            // 行数限制
+            if (limit > 0)
+            {
+                var lines = content.Split('\n');
+                if (lines.Length > limit)
+                {
+                    content = string.Join('\n', lines.Take(limit)) + 
+                              $"\n... ({lines.Length - limit} more lines)";
+                }
+            }
+            
+            // 输出截断
+            return Task.FromResult(SecurityService.TruncateOutput(content));
         }
         catch (Exception ex)
         {

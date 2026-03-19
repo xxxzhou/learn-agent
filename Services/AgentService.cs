@@ -74,15 +74,16 @@ public class AgentService
                 MaxTokens = 2048,
                 Tools = toolRegistry.GetToolDefinitions()
             };
-            
+            // 提交给大模型
             var response = await client.ChatAsync(request);
+            // 大模型返回 
             var choice = response.Choices.FirstOrDefault();
             
             if (choice == null)
             {
                 return "No response";
             }
-            
+            // 返回的大模型消息
             var assistantMessage = choice.Message;
             
             // 添加助手消息到历史
@@ -93,7 +94,7 @@ public class AgentService
                 ToolCalls = assistantMessage.ToolCalls
             });
             
-            // 检查是否有工具调用
+            // 检查大模型是否需要调用工具,如果有工具执行,等工具执行完返回再提交
             if (assistantMessage.ToolCalls != null && assistantMessage.ToolCalls.Count > 0)
             {
                 foreach (var toolCall in assistantMessage.ToolCalls)

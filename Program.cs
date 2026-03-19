@@ -28,11 +28,14 @@ public class Program
         Console.WriteLine($"模型: {config.ModelId}");
         Console.WriteLine();
 
-        // 创建工具注册表
+        // 创建安全服务
+        var security = new SecurityService();
+        
+        // 创建工具注册表（注入安全服务）
         var toolRegistry = new ToolRegistry()
-            .Register(new BashTool())
-            .Register(new ReadFileTool())
-            .Register(new WriteFileTool());
+            .Register(new BashTool(security))
+            .Register(new ReadFileTool(security))
+            .Register(new WriteFileTool(security));
         
         // 创建客户端
         using var client = ClientFactory.Create(config);
