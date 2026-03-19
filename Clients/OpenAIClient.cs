@@ -96,8 +96,8 @@ public class OpenAIClient : ILLMClient
         // 使用 AuthenticationHeaderValue 设置 Authorization
         httpRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
         
-        // 显示等待提示
-        ConsoleLogger.Info("正在请求 API...");
+        // 显示API请求开始
+        ConsoleLogger.ApiRequest(request.Model, request.Messages?.Count ?? 0);
         
         var response = await httpClient.SendAsync(httpRequest);
         var content = await response.Content.ReadAsStringAsync();

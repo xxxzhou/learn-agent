@@ -8,7 +8,7 @@ public class TodoItem
     /// <summary>
     /// 任务ID
     /// </summary>
-    public string Id { get; set; } = string.Empty;
+    public int Id { get; set; }
     
     /// <summary>
     /// 任务内容

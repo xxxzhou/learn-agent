@@ -40,16 +40,41 @@ public static class ConsoleLogger
     }
     
     /// <summary>
-    /// 打印工具调用
+    /// 打印工具调用（是大模型的响应，表示大模型决定调用此工具）
     /// </summary>
     public static void Tool(string toolName, string arguments)
     {
+        // 显示这是大模型的响应
+        Console.ForegroundColor = ConsoleColor.DarkGray;
+        Console.Write("  ← 模型的响应: 调用工具 → ");
         Console.ForegroundColor = ColorTool;
-        Console.Write("$ ");
-        Console.ForegroundColor = ConsoleColor.White;
         Console.Write(toolName);
         Console.ForegroundColor = ColorTool;
         Console.WriteLine($"({arguments})");
+        Console.ResetColor();
+    }
+
+    /// <summary>
+    /// 打印 API 请求开始
+    /// </summary>
+    public static void ApiRequest(string model, int messageCount)
+    {
+        Console.ForegroundColor = ConsoleColor.DarkGray;
+        Console.Write("→ API请求: ");
+        Console.ForegroundColor = ConsoleColor.Cyan;
+        Console.Write(model);
+        Console.ForegroundColor = ConsoleColor.DarkGray;
+        Console.WriteLine($" (消息数: {messageCount})");
+        Console.ResetColor();
+    }
+
+    /// <summary>
+    /// 打印 API 响应开始
+    /// </summary>
+    public static void ApiResponse()
+    {
+        Console.ForegroundColor = ConsoleColor.DarkGray;
+        Console.Write("← 等待API响应");
         Console.ResetColor();
     }
     

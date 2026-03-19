@@ -168,10 +168,21 @@ public class SubagentService
             messages.Add(new ChatMessage { Role = "system", Content = systemPrompt });
         }
         
-        // 添加历史消息
+        // 添加历史消息（包括 tool 消息）
         foreach (var msg in history)
         {
-            if (msg.Content != null && !string.IsNullOrEmpty(msg.Content.ToString()))
+            // tool 消息必须有 ToolCallId，不能被过滤
+            if (msg.Role == "tool")
+            {
+                messages.Add(msg);
+            }
+            // 其他消息检查 Content 是否有效
+            else if (msg.Content != null && !string.IsNullOrEmpty(msg.Content.ToString()))
+            {
+                messages.Add(msg);
+            }
+            // assistant 消息可能只有 ToolCalls 没有 Content
+            else if (msg.Role == "assistant" && msg.ToolCalls != null && msg.ToolCalls.Count > 0)
             {
                 messages.Add(msg);
             }

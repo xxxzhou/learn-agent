@@ -6,30 +6,12 @@ using LearnAgent.Tools;
 namespace LearnAgent;
 
 public class Program
-{
-    // Windows API 声明
-    private const int STD_OUTPUT_HANDLE = -11;
-    private const uint ENABLE_VIRTUAL_TERMINAL_PROCESSING = 0x0004;
-    private const uint ENABLE_PROCESSED_OUTPUT = 0x0001;
-    
-    [DllImport("kernel32.dll")]
-    private static extern IntPtr GetStdHandle(int nStdHandle);
-    
-    [DllImport("kernel32.dll")]
-    private static extern bool SetConsoleMode(IntPtr hConsoleHandle, uint dwMode);
-    
+{     
     public static async Task Main(string[] args)
     {
         // 设置控制台编码为 UTF-8，解决中文乱码问题
         Console.OutputEncoding = Encoding.UTF8;
-        Console.InputEncoding = Encoding.UTF8;
-        
-        // Windows 控制台特殊处理：启用 ANSI 转义序列支持
-        if (OperatingSystem.IsWindows())
-        {
-            var handle = GetStdHandle(STD_OUTPUT_HANDLE);
-            SetConsoleMode(handle, ENABLE_VIRTUAL_TERMINAL_PROCESSING | ENABLE_PROCESSED_OUTPUT);
-        }
+        Console.InputEncoding = Encoding.Unicode;
         
         Console.WriteLine("=== Learn Agent - s04 Subagent ===");
         Console.WriteLine("子代理上下文隔离");
@@ -97,7 +79,7 @@ public class Program
             Console.Write("s04 >> ");
             Console.ResetColor();
             
-            var input = Console.ReadLine();
+            var input = Console.ReadLine();            
             if (string.IsNullOrWhiteSpace(input) || input?.ToLower() is "q" or "exit" or "quit")
                 break;
 

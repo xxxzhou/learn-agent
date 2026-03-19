@@ -18,6 +18,10 @@ public class TaskTool : ITool
         "The subagent shares the filesystem but has its own conversation context.";
     
     private readonly SubagentService subagentService;
+    private static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        PropertyNameCaseInsensitive = true
+    };
     
     public TaskTool(SubagentService subagentService)
     {
@@ -28,10 +32,7 @@ public class TaskTool : ITool
     {
         try
         {
-            var args = JsonSerializer.Deserialize<TaskArguments>(argumentsJson, new JsonSerializerOptions
-            {
-                PropertyNameCaseInsensitive = true
-            });
+            var args = JsonSerializer.Deserialize<TaskArguments>(argumentsJson, JsonOptions);
             
             if (args == null || string.IsNullOrEmpty(args.Prompt))
             {

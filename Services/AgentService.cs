@@ -55,11 +55,21 @@ public class AgentService
                 requestMessages.Add(new ChatMessage { Role = "system", Content = systemPrompt });
             }
             
-            // 添加历史消息（确保没有空内容的消息）
+            // 添加历史消息（包括 tool 消息）
             foreach (var msg in messages)
             {
-                // 只添加有内容的消息
-                if (msg.Content != null && !string.IsNullOrEmpty(msg.Content.ToString()))
+                // tool 消息必须有 ToolCallId，不能被过滤
+                if (msg.Role == "tool")
+                {
+                    requestMessages.Add(msg);
+                }
+                // 其他消息检查 Content 是否有效
+                else if (msg.Content != null && !string.IsNullOrEmpty(msg.Content.ToString()))
+                {
+                    requestMessages.Add(msg);
+                }
+                // assistant 消息可能只有 ToolCalls 没有 Content
+                else if (msg.Role == "assistant" && msg.ToolCalls != null && msg.ToolCalls.Count > 0)
                 {
                     requestMessages.Add(msg);
                 }
@@ -122,11 +132,13 @@ public class AgentService
                     });
                 }
                 
-                // Nag reminder: 如果连续多轮未更新 todo，注入提醒
+                // 添加工具结果到历史
+                messages.AddRange(toolResults);
+                
+                // Nag reminder: 如果连续多轮未更新 todo，在工具结果后注入提醒
                 roundsSinceTodo = usedTodo ? 0 : roundsSinceTodo + 1;
                 if (roundsSinceTodo >= MaxRoundsWithoutTodo)
                 {
-                    // 在工具结果前插入提醒
                     messages.Add(new ChatMessage
                     {
                         Role = "user",
@@ -135,8 +147,6 @@ public class AgentService
                     roundsSinceTodo = 0; // 重置计数器
                 }
                 
-                // 添加工具结果到历史
-                messages.AddRange(toolResults);
                 continue;
             }
             

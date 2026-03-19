@@ -45,8 +45,8 @@ public class TodoManager
         {
             var item = newItems[i];
             
-            // 验证 ID
-            var id = string.IsNullOrWhiteSpace(item.Id) ? (i + 1).ToString() : item.Id.Trim();
+            // 验证 ID（如果没有提供，使用索引+1）
+            var id = item.Id > 0 ? item.Id : i + 1;
             
             // 验证文本
             var text = item.Text?.Trim() ?? "";
