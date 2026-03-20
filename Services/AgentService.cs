@@ -14,10 +14,17 @@ public class AgentService
     private readonly string modelId;
     private readonly List<ChatMessage> messages;
     private readonly string? systemPrompt;
+    private ContextCompressor? compressor;
     
     // Nag reminder: 追踪未更新 todo 的轮数
     private int roundsSinceTodo = 0;
     private const int MaxRoundsWithoutTodo = 3;
+    
+    // 手动压缩标志
+    private bool pendingCompact = false;
+
+    // 上一次压缩的摘要内容
+    private string? lastSummary = null;
     
     public AgentService(ILLMClient client, ToolRegistry toolRegistry, string modelId, string? systemPrompt = null)
     {
@@ -29,12 +36,51 @@ public class AgentService
     }
     
     /// <summary>
+    /// 设置上下文压缩器
+    /// </summary>
+    public void SetCompressor(ContextCompressor compressor)
+    {
+        this.compressor = compressor;
+    }
+    
+    /// <summary>
     /// 发送消息并获取响应
     /// </summary>
     public async Task<string> SendMessageAsync(string userMessage)
     {
         messages.Add(new ChatMessage { Role = "user", Content = userMessage });
-        return await ProcessLoopAsync();
+        var response = await ProcessLoopAsync();
+
+        // 如果有摘要，打印特殊格式
+        if (!string.IsNullOrEmpty(lastSummary))
+        {
+            PrintSummary(lastSummary);
+            lastSummary = null;  // 重置
+        }
+
+        return response;
+    }
+
+    /// <summary>
+    /// 打印压缩摘要（带特殊颜色）
+    /// </summary>
+    private void PrintSummary(string summary)
+    {
+        Console.WriteLine();
+        Console.ForegroundColor = ConsoleColor.Magenta;
+        Console.WriteLine("═══════════════════════════════════════════════════════");
+        Console.WriteLine("                    【上下文压缩摘要】");
+        Console.WriteLine("═══════════════════════════════════════════════════════");
+        Console.ResetColor();
+
+        Console.ForegroundColor = ConsoleColor.Cyan;
+        Console.WriteLine(summary);
+        Console.ResetColor();
+
+        Console.ForegroundColor = ConsoleColor.Magenta;
+        Console.WriteLine("═══════════════════════════════════════════════════════");
+        Console.ResetColor();
+        Console.WriteLine();
     }
     
     /// <summary>
@@ -46,6 +92,51 @@ public class AgentService
         
         while (true)
         {
+            // Layer 1: micro_compact - 每次调用前静默执行
+            if (compressor != null)
+            {
+                var compactedMessages = compressor.MicroCompact(messages);
+                messages.Clear();
+                messages.AddRange(compactedMessages);
+                
+                // Layer 2: auto_compact - 检查是否超过 token 阈值
+                if (compressor.NeedsAutoCompact(messages))
+                {
+                    ConsoleLogger.Info("Token threshold exceeded, auto-compacting...");
+                    var compressedMessages = await compressor.AutoCompactAsync(messages);
+                    messages.Clear();
+                    messages.AddRange(compressedMessages);
+                }
+                
+                // Layer 3: 检查是否需要手动压缩
+                if (pendingCompact)
+                {
+                    ConsoleLogger.Info("Manual compact triggered");
+                    var result = await compressor.CompactAsync(messages);
+                    lastSummary = result;  // 保存摘要
+                    messages.Clear();
+                    messages.Add(new ChatMessage
+                    {
+                        Role = "user",
+                        Content = $"[Compressed conversation]\n\n{result}"
+                    });
+                    pendingCompact = false;
+                }
+
+                // Layer 2: 检查是否是自动压缩后的首次响应
+                if (compressor != null && compressor.WasAutoCompressed())
+                {
+                    var summary = compressor.GetLastSummary();  // 获取摘要
+                    compressor.ResetAutoCompressed();  // 重置状态
+
+                    // 立即打印摘要
+                    if (!string.IsNullOrEmpty(summary))
+                    {
+                        PrintSummary(summary);
+                    }
+                }
+            }
+            
             // 构建请求消息列表 - 每次请求都重新构建
             var requestMessages = new List<ChatMessage>();
             
@@ -88,6 +179,14 @@ public class AgentService
                 MaxTokens = 2048,
                 Tools = toolRegistry.GetToolDefinitions()
             };
+            
+            // 调试输出 token 估算
+            if (compressor != null)
+            {
+                var estimatedTokens = compressor.EstimateTokens(requestMessages);
+                ConsoleLogger.Debug($"Estimated tokens: {estimatedTokens}");
+            }
+            
             // 提交给大模型
             var response = await client.ChatAsync(request);
             // 大模型返回 
@@ -176,6 +275,19 @@ public class AgentService
         var arguments = toolCall.Function.Arguments;
         
         ConsoleLogger.Tool(toolName, arguments);
+        
+        // 检查是否是 compact 工具
+        if (toolName == "compact")
+        {
+            if (compressor == null)
+            {
+                return "Error: Compressor not initialized. Context compression is not available.";
+            }
+            
+            // 设置手动压缩标志
+            pendingCompact = true;
+            return "Compacting context... This will be applied on the next round.";
+        }
         
         var result = await toolRegistry.ExecuteAsync(toolName, arguments);
         

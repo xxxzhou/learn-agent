@@ -13,8 +13,8 @@ public class Program
         Console.OutputEncoding = Encoding.UTF8;
         Console.InputEncoding = Encoding.Unicode;
         
-        Console.WriteLine("=== Learn Agent - s05 Skill Loading ===");
-        Console.WriteLine("技能按需加载");
+        Console.WriteLine("=== Learn Agent - s06 Context Compact ===");
+        Console.WriteLine("上下文压缩 - 无限会话");
         Console.WriteLine();
 
         // 加载配置
@@ -64,26 +64,35 @@ public class Program
         // 注册 Task 工具（需要子代理服务）
         toolRegistry.Register(new TaskTool(subagentService));
         
-        // 更新系统提示，包含技能加载功能
+        // 更新系统提示，包含技能加载和压缩功能
         var systemPrompt = config.SystemPrompt + 
             $"\n\nSkills available:\n{skillLoader.GetSkillDescriptions()}" +
-            "\n\nIMPORTANT INSTRUCTIONS:\n" +
+            "\n\nContext Management:\n" +
+            "- The conversation will be automatically compressed when it gets too long\n" +
+            "- Use the 'compact' tool to manually trigger compression when needed\n" +
+            "- Full history is saved to .transcripts/ for recovery\n" +
+            "\nIMPORTANT INSTRUCTIONS:\n" +
             "1. Use the 'load_skill' tool when you need domain-specific knowledge (e.g., code-review, git-workflow).\n" +
             "   Example: load_skill(name=\"code-review\")\n" +
             "2. Use the 'task' tool when you need to explore files, search code, or do complex analysis.\n" +
             "   Example: task(prompt=\"Search all .cs files for TODO comments\", description=\"Search TODOs\")\n" +
             "3. The task tool creates a subagent with fresh context - use it to keep your context clean.\n" +
             "4. Use the 'todo' tool to track progress on multi-step tasks.\n" +
-            "5. Do NOT repeat the same action multiple times.";
+            "5. Use the 'compact' tool to manually compress context when it gets too long.\n" +
+            "6. Do NOT repeat the same action multiple times.";
         
         // 创建 Agent 服务
         var agent = new AgentService(client, toolRegistry, config.ModelId, systemPrompt);
+        
+        // 创建上下文压缩器并设置到 Agent
+        var compressor = new ContextCompressor(client, security.GetWorkDirectory(), config.ModelId);
+        agent.SetCompressor(compressor);
         
         // 交互式循环
         while (true)
         {
             Console.ForegroundColor = ConsoleColor.Cyan;
-            Console.Write("s05 >> ");
+            Console.Write("s06 >> ");
             Console.ResetColor();
             
             var input = Console.ReadLine();            

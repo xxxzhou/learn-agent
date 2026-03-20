@@ -22,7 +22,7 @@ public class ToolRegistry
     
     public List<ToolDefinition> GetToolDefinitions()
     {
-        return tools.Values.Select(t => new ToolDefinition
+        var definitions = tools.Values.Select(t => new ToolDefinition
         {
             Type = "function",
             Function = new FunctionDefinition
@@ -32,6 +32,20 @@ public class ToolRegistry
                 Parameters = GetParametersForTool(t.Name)
             }
         }).ToList();
+
+        // 手动添加 compact 工具（由 AgentService 处理，不在 tools 字典中）
+        definitions.Add(new ToolDefinition
+        {
+            Type = "function",
+            Function = new FunctionDefinition
+            {
+                Name = "compact",
+                Description = "Manually trigger context compression to reduce token usage",
+                Parameters = GetParametersForTool("compact")
+            }
+        });
+
+        return definitions;
     }
     
     private Dictionary<string, object> GetParametersForTool(string toolName)
@@ -112,6 +126,19 @@ public class ToolRegistry
                     }
                 },
                 ["required"] = new List<string> { "prompt" }
+            },
+            "compact" => new Dictionary<string, object>
+            {
+                ["type"] = "object",
+                ["properties"] = new Dictionary<string, object>
+                {
+                    ["reason"] = new Dictionary<string, object>
+                    {
+                        ["type"] = "string",
+                        ["description"] = "Optional reason for compacting the context"
+                    }
+                },
+                ["required"] = new List<string>()
             },
             _ => new Dictionary<string, object>
             {
