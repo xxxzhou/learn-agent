@@ -140,6 +140,57 @@ public class ToolRegistry
                 },
                 ["required"] = new List<string>()
             },
+            "file_task" => new Dictionary<string, object>
+            {
+                ["type"] = "object",
+                ["properties"] = new Dictionary<string, object>
+                {
+                    ["action"] = new Dictionary<string, object>
+                    {
+                        ["type"] = "string",
+                        ["description"] = "Action to perform: create, get, update, list, claim, unclaim, delete"
+                    },
+                    ["task_id"] = new Dictionary<string, object>
+                    {
+                        ["type"] = "integer",
+                        ["description"] = "Task ID (required for get, update, claim, unclaim, delete)"
+                    },
+                    ["subject"] = new Dictionary<string, object>
+                    {
+                        ["type"] = "string",
+                        ["description"] = "Task subject/title (required for create)"
+                    },
+                    ["description"] = new Dictionary<string, object>
+                    {
+                        ["type"] = "string",
+                        ["description"] = "Task description (optional for create/update)"
+                    },
+                    ["status"] = new Dictionary<string, object>
+                    {
+                        ["type"] = "string",
+                        ["description"] = "Task status: pending, in_progress, completed (for update)",
+                        ["enum"] = new[] { "pending", "in_progress", "completed" }
+                    },
+                    ["owner"] = new Dictionary<string, object>
+                    {
+                        ["type"] = "string",
+                        ["description"] = "Owner name (required for claim)"
+                    },
+                    ["add_blocked_by"] = new Dictionary<string, object>
+                    {
+                        ["type"] = "array",
+                        ["items"] = new Dictionary<string, object> { ["type"] = "integer" },
+                        ["description"] = "Task IDs that this task depends on (for update)"
+                    },
+                    ["add_blocks"] = new Dictionary<string, object>
+                    {
+                        ["type"] = "array",
+                        ["items"] = new Dictionary<string, object> { ["type"] = "integer" },
+                        ["description"] = "Task IDs that this task blocks (for update)"
+                    }
+                },
+                ["required"] = new List<string> { "action" }
+            },
             _ => new Dictionary<string, object>
             {
                 ["type"] = "object",

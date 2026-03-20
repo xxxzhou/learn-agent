@@ -43,13 +43,17 @@ public class Program
         // 创建 Todo 管理器
         var todoManager = new TodoManager();
         
+        // 创建任务管理器 (S7 持久化任务系统)
+        var taskManager = new TaskManager(security.GetWorkDirectory());
+        
         // 创建工具注册表
         var toolRegistry = new ToolRegistry()
             .Register(new BashTool(security))
             .Register(new ReadFileTool(security))
             .Register(new WriteFileTool(security))
             .Register(new TodoTool(todoManager))
-            .Register(new LoadSkillTool(skillLoader));
+            .Register(new LoadSkillTool(skillLoader))
+            .Register(new FileTaskTool(taskManager));
         
         // 创建客户端
         using var client = ClientFactory.Create(config);
@@ -79,7 +83,15 @@ public class Program
             "3. The task tool creates a subagent with fresh context - use it to keep your context clean.\n" +
             "4. Use the 'todo' tool to track progress on multi-step tasks.\n" +
             "5. Use the 'compact' tool to manually compress context when it gets too long.\n" +
-            "6. Do NOT repeat the same action multiple times.";
+            "6. Use 'file_task' tool for persistent long-term tasks that survive context compression:\n" +
+            "   - file_task(action=\"create\", subject=\"Task title\", description=\"Details\") - Create a task\n" +
+            "   - file_task(action=\"list\") - List all tasks with status\n" +
+            "   - file_task(action=\"get\", task_id=1) - Get task details\n" +
+            "   - file_task(action=\"update\", task_id=1, status=\"in_progress\") - Update task status\n" +
+            "   - file_task(action=\"claim\", task_id=1, owner=\"agent\") - Claim a task\n" +
+            "   - file_task(action=\"update\", task_id=1, add_blocked_by=[2]) - Add dependency\n" +
+            "   - Tasks are stored in .tasks/ directory and persist across sessions\n" +
+            "7. Do NOT repeat the same action multiple times.";
         
         // 创建 Agent 服务
         var agent = new AgentService(client, toolRegistry, config.ModelId, systemPrompt);
