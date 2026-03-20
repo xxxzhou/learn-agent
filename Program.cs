@@ -13,8 +13,8 @@ public class Program
         Console.OutputEncoding = Encoding.UTF8;
         Console.InputEncoding = Encoding.Unicode;
         
-        Console.WriteLine("=== Learn Agent - s04 Subagent ===");
-        Console.WriteLine("子代理上下文隔离");
+        Console.WriteLine("=== Learn Agent - s05 Skill Loading ===");
+        Console.WriteLine("技能按需加载");
         Console.WriteLine();
 
         // 加载配置
@@ -37,15 +37,19 @@ public class Program
         // 创建安全服务
         var security = new SecurityService();
         
+        // 创建技能加载器
+        var skillLoader = new SkillLoader(security.GetWorkDirectory());
+        
         // 创建 Todo 管理器
         var todoManager = new TodoManager();
         
-        // 创建工具注册表（先不注册 TaskTool）
+        // 创建工具注册表
         var toolRegistry = new ToolRegistry()
             .Register(new BashTool(security))
             .Register(new ReadFileTool(security))
             .Register(new WriteFileTool(security))
-            .Register(new TodoTool(todoManager));
+            .Register(new TodoTool(todoManager))
+            .Register(new LoadSkillTool(skillLoader));
         
         // 创建客户端
         using var client = ClientFactory.Create(config);
@@ -60,14 +64,17 @@ public class Program
         // 注册 Task 工具（需要子代理服务）
         toolRegistry.Register(new TaskTool(subagentService));
         
-        // 更新系统提示，鼓励使用 task 工具委派子任务
+        // 更新系统提示，包含技能加载功能
         var systemPrompt = config.SystemPrompt + 
+            $"\n\nSkills available:\n{skillLoader.GetSkillDescriptions()}" +
             "\n\nIMPORTANT INSTRUCTIONS:\n" +
-            "1. Use the 'task' tool when you need to explore files, search code, or do complex analysis.\n" +
+            "1. Use the 'load_skill' tool when you need domain-specific knowledge (e.g., code-review, git-workflow).\n" +
+            "   Example: load_skill(name=\"code-review\")\n" +
+            "2. Use the 'task' tool when you need to explore files, search code, or do complex analysis.\n" +
             "   Example: task(prompt=\"Search all .cs files for TODO comments\", description=\"Search TODOs\")\n" +
-            "2. The task tool creates a subagent with fresh context - use it to keep your context clean.\n" +
-            "3. Use the 'todo' tool to track progress on multi-step tasks.\n" +
-            "4. Do NOT repeat the same action multiple times.";
+            "3. The task tool creates a subagent with fresh context - use it to keep your context clean.\n" +
+            "4. Use the 'todo' tool to track progress on multi-step tasks.\n" +
+            "5. Do NOT repeat the same action multiple times.";
         
         // 创建 Agent 服务
         var agent = new AgentService(client, toolRegistry, config.ModelId, systemPrompt);
@@ -76,7 +83,7 @@ public class Program
         while (true)
         {
             Console.ForegroundColor = ConsoleColor.Cyan;
-            Console.Write("s04 >> ");
+            Console.Write("s05 >> ");
             Console.ResetColor();
             
             var input = Console.ReadLine();            

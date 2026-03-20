@@ -82,6 +82,37 @@ public class ToolRegistry
                 },
                 ["required"] = new List<string> { "file_path", "content" }
             },
+            "load_skill" => new Dictionary<string, object>
+            {
+                ["type"] = "object",
+                ["properties"] = new Dictionary<string, object>
+                {
+                    ["name"] = new Dictionary<string, object>
+                    {
+                        ["type"] = "string",
+                        ["description"] = "The name of the skill to load (e.g., 'code-review', 'git-workflow')"
+                    }
+                },
+                ["required"] = new List<string> { "name" }
+            },
+            "task" => new Dictionary<string, object>
+            {
+                ["type"] = "object",
+                ["properties"] = new Dictionary<string, object>
+                {
+                    ["prompt"] = new Dictionary<string, object>
+                    {
+                        ["type"] = "string",
+                        ["description"] = "The task description for the subagent"
+                    },
+                    ["description"] = new Dictionary<string, object>
+                    {
+                        ["type"] = "string",
+                        ["description"] = "Short description of the task"
+                    }
+                },
+                ["required"] = new List<string> { "prompt" }
+            },
             _ => new Dictionary<string, object>
             {
                 ["type"] = "object",

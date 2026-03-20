@@ -123,6 +123,14 @@ public static class ConsoleLogger
     {
         WriteLine("[OK]", ColorSuccess, message, ConsoleColor.White);
     }
+
+    /// <summary>
+    /// 打印警告
+    /// </summary>
+    public static void Warning(string message)
+    {
+        WriteLine("[WARN]", ConsoleColor.Yellow, message, ConsoleColor.White);
+    }
     
     /// <summary>
     /// 打印错误
