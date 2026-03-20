@@ -13,8 +13,8 @@ public class Program
         Console.OutputEncoding = Encoding.UTF8;
         Console.InputEncoding = Encoding.Unicode;
         
-        Console.WriteLine("=== Learn Agent - s09 Agent Teams ===");
-        Console.WriteLine("智能体团队 - 多个模型协作工作");
+        Console.WriteLine("=== Learn Agent - s11 Autonomous Agents ===");
+        Console.WriteLine("自治智能体 - 队友自动找活认领");
         Console.WriteLine();
 
         // 加载配置
@@ -73,13 +73,17 @@ public class Program
             .Register(new ShutdownRequestTool(teammateManager))
             .Register(new ShutdownResponseTool(teammateManager))
             .Register(new PlanSubmitTool(teammateManager))
-            .Register(new PlanReviewTool(teammateManager));
+            .Register(new PlanReviewTool(teammateManager))
+            // S11 自治工具
+            .Register(new IdleTool(teammateManager))
+            .Register(new ClaimTaskTool(teammateManager))
+            .Register(new ScanTasksTool(taskManager));
         
         // 创建客户端
         using var client = ClientFactory.Create(config);
         
-        // 设置队友管理器依赖
-        teammateManager.SetDependencies(client, toolRegistry, config.ModelId);
+        // 设置队友管理器依赖（S11 需要传入 taskManager）
+        teammateManager.SetDependencies(client, toolRegistry, config.ModelId, taskManager);
         
         // 创建子代理服务
         var subagentService = new SubagentService(
@@ -127,7 +131,14 @@ public class Program
             "   - team_status() - Get team roster\n" +
             "   - teammate_shutdown(name=\"alice\") - Shutdown a teammate\n" +
             "   - Teammates run in parallel threads with their own context\n" +
-            "9. Do NOT repeat the same action multiple times.";
+            "9. Do NOT repeat the same action multiple times.\n" +
+            "10. S11 Autonomous Behavior:\n" +
+            "   - Teammates can use 'idle' tool when no immediate work\n" +
+            "   - Teammates auto-poll for messages and tasks while idle\n" +
+            "   - Teammates auto-claim unclaimed tasks from task board\n" +
+            "   - Use 'scan_tasks' to see available unclaimed tasks\n" +
+            "   - Use 'claim_task(task_id=N)' to manually claim a task\n" +
+            "   - After 60s idle with no work, teammates auto-shutdown";
         
         // 创建 Agent 服务
         var agent = new AgentService(client, toolRegistry, config.ModelId, systemPrompt);
@@ -143,7 +154,7 @@ public class Program
         while (true)
         {
             Console.ForegroundColor = ConsoleColor.Cyan;
-            Console.Write("s08 >> ");
+            Console.Write("s11 >> ");
             Console.ResetColor();
             
             var input = Console.ReadLine();            

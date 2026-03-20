@@ -322,6 +322,117 @@ public class ToolRegistry
                 },
                 ["required"] = new List<string> { "name" }
             },
+            "shutdown_request" => new Dictionary<string, object>
+            {
+                ["type"] = "object",
+                ["properties"] = new Dictionary<string, object>
+                {
+                    ["recipient"] = new Dictionary<string, object>
+                    {
+                        ["type"] = "string",
+                        ["description"] = "Name of the teammate to request shutdown"
+                    },
+                    ["reason"] = new Dictionary<string, object>
+                    {
+                        ["type"] = "string",
+                        ["description"] = "Reason for shutdown request"
+                    }
+                },
+                ["required"] = new List<string> { "recipient" }
+            },
+            "shutdown_response" => new Dictionary<string, object>
+            {
+                ["type"] = "object",
+                ["properties"] = new Dictionary<string, object>
+                {
+                    ["request_id"] = new Dictionary<string, object>
+                    {
+                        ["type"] = "string",
+                        ["description"] = "The request ID to respond to"
+                    },
+                    ["approve"] = new Dictionary<string, object>
+                    {
+                        ["type"] = "boolean",
+                        ["description"] = "Whether to approve the shutdown"
+                    },
+                    ["reason"] = new Dictionary<string, object>
+                    {
+                        ["type"] = "string",
+                        ["description"] = "Optional reason for the response"
+                    }
+                },
+                ["required"] = new List<string> { "request_id", "approve" }
+            },
+            "plan_submit" => new Dictionary<string, object>
+            {
+                ["type"] = "object",
+                ["properties"] = new Dictionary<string, object>
+                {
+                    ["recipient"] = new Dictionary<string, object>
+                    {
+                        ["type"] = "string",
+                        ["description"] = "Name of the teammate to submit plan to (default: 'lead')"
+                    },
+                    ["plan"] = new Dictionary<string, object>
+                    {
+                        ["type"] = "string",
+                        ["description"] = "The plan content to submit"
+                    },
+                    ["summary"] = new Dictionary<string, object>
+                    {
+                        ["type"] = "string",
+                        ["description"] = "Short summary of the plan"
+                    }
+                },
+                ["required"] = new List<string> { "plan" }
+            },
+            "plan_review" => new Dictionary<string, object>
+            {
+                ["type"] = "object",
+                ["properties"] = new Dictionary<string, object>
+                {
+                    ["request_id"] = new Dictionary<string, object>
+                    {
+                        ["type"] = "string",
+                        ["description"] = "The request ID to review"
+                    },
+                    ["approve"] = new Dictionary<string, object>
+                    {
+                        ["type"] = "boolean",
+                        ["description"] = "Whether to approve the plan"
+                    },
+                    ["feedback"] = new Dictionary<string, object>
+                    {
+                        ["type"] = "string",
+                        ["description"] = "Feedback for the plan"
+                    }
+                },
+                ["required"] = new List<string> { "request_id", "approve" }
+            },
+            // S11: 自治工具
+            "idle" => new Dictionary<string, object>
+            {
+                ["type"] = "object",
+                ["properties"] = new Dictionary<string, object>()
+            },
+            "claim_task" => new Dictionary<string, object>
+            {
+                ["type"] = "object",
+                ["properties"] = new Dictionary<string, object>
+                {
+                    ["task_id"] = new Dictionary<string, object>
+                    {
+                        ["type"] = "integer",
+                        ["description"] = "The ID of the task to claim"
+                    }
+                },
+                ["required"] = new List<string> { "task_id" }
+            },
+            "scan_tasks" => new Dictionary<string, object>
+            {
+                ["type"] = "object",
+                ["properties"] = new Dictionary<string, object>()
+            },
             _ => new Dictionary<string, object>
             {
                 ["type"] = "object",

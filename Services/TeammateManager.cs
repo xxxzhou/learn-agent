@@ -15,6 +15,7 @@ namespace LearnAgent.Services;
 /// - 运行队友的 agent loop
 /// - 协调队友间通信
 /// - S10: 关机协议和计划审批
+/// - S11: 自治智能体 - WORK/IDLE双阶段、空闲轮询、自动认领任务、身份重注入
 /// </summary>
 public class TeammateManager
 {
@@ -29,10 +30,19 @@ public class TeammateManager
     private readonly ConcurrentDictionary<string, CoordinationRequest> ShutdownRequests = new();
     private readonly ConcurrentDictionary<string, CoordinationRequest> PlanRequests = new();
     
+    // S11: 空闲状态追踪
+    private readonly ConcurrentDictionary<string, bool> IdleFlags = new();
+    private readonly ConcurrentDictionary<string, List<ChatMessage>> TeammateMessages = new();
+    
     // 需要外部注入的依赖
     private ILLMClient? client;
     private ToolRegistry? toolRegistry;
     private string? modelId;
+    private TaskManager? taskManager;
+    
+    // S11 常量
+    private const int IDLE_TIMEOUT = 60; // 空闲超时（秒）
+    private const int POLL_INTERVAL = 5; // 轮询间隔（秒）
     
     private static readonly JsonSerializerOptions JsonOpts = new()
     {
@@ -54,11 +64,12 @@ public class TeammateManager
     /// <summary>
     /// 设置依赖（由 Program.cs 注入）
     /// </summary>
-    public void SetDependencies(ILLMClient client, ToolRegistry toolRegistry, string modelId)
+    public void SetDependencies(ILLMClient client, ToolRegistry toolRegistry, string modelId, TaskManager? taskManager = null)
     {
         this.client = client;
         this.toolRegistry = toolRegistry;
         this.modelId = modelId;
+        this.taskManager = taskManager;
     }
 
     /// <summary>
@@ -119,8 +130,15 @@ public class TeammateManager
         Config.Members.Add(teammate);
         SaveConfig(Config);
         
-        // 重置关闭标志
+        // 重置关闭标志和空闲标志
         ShutdownFlags[name] = false;
+        IdleFlags[name] = false;
+        
+        // 初始化消息历史
+        TeammateMessages[name] = new List<ChatMessage>
+        {
+            new() { Role = "user", Content = prompt }
+        };
         
         // 启动队友线程
         var thread = new Thread(() => TeammateLoop(name, role, prompt))
@@ -135,92 +153,142 @@ public class TeammateManager
     }
 
     /// <summary>
-    /// 队友的主循环
+    /// S11: 队友的主循环 - WORK/IDLE 双阶段
     /// </summary>
     private void TeammateLoop(string name, string role, string initialPrompt)
     {
         try
         {
-            var messages = new List<ChatMessage>
+            var messages = TeammateMessages.GetOrAdd(name, _ => new List<ChatMessage>
             {
                 new() { Role = "user", Content = initialPrompt }
-            };
+            });
             
-            var teammateSystemPrompt = $"You are {name}, a {role} in a team. " +
-                "**IMPORTANT: You are on Windows. Use 'dir' instead of 'ls', 'type' instead of 'cat'.** " +
-                "You can receive messages from other teammates via your inbox. " +
-                "Use the 'send_message' tool to communicate with others. " +
-                "Use 'read_inbox' to check for new messages. " +
-                "Use 'shutdown_response' to respond to shutdown requests. " +
-                "Use 'plan_submit' to submit plans for approval. " +
-                "Work autonomously and report progress when asked.";
-            
-            for (int i = 0; i < 50; i++) // 最多50轮
+            while (!ShutdownFlags.GetValueOrDefault(name, false))
             {
-                // 检查关闭标志
+                // ==================== WORK PHASE ====================
+                UpdateMemberStatus(name, TeammateStatus.Working);
+                IdleFlags[name] = false;
+                
+                var shouldIdle = WorkPhase(name, role, messages);
+                
                 if (ShutdownFlags.GetValueOrDefault(name, false))
                 {
-                    UpdateMemberStatus(name, TeammateStatus.Shutdown);
                     break;
                 }
                 
-                // 读取收件箱
-                var inbox = MessageBus.ReadInbox(name);
-                if (inbox != "[]")
+                // ==================== IDLE PHASE ====================
+                if (shouldIdle)
                 {
-                    messages.Add(new ChatMessage
+                    UpdateMemberStatus(name, TeammateStatus.Idle);
+                    IdleFlags[name] = true;
+                    
+                    var resume = IdlePoll(name, role, messages);
+                    
+                    if (!resume)
                     {
-                        Role = "user",
-                        Content = $"<inbox>\n{inbox}\n</inbox>"
-                    });
-                    messages.Add(new ChatMessage
-                    {
-                        Role = "assistant",
-                        Content = "Noted inbox messages."
-                    });
+                        // 超时 -> 自动关机
+                        ConsoleLogger.Info($"Teammate '{name}' idle timeout, shutting down");
+                        UpdateMemberStatus(name, TeammateStatus.Shutdown);
+                        return;
+                    }
                 }
-                
-                // 构建请求
-                var requestMessages = new List<ChatMessage>
+            }
+            
+            // 正常退出
+            UpdateMemberStatus(name, TeammateStatus.Shutdown);
+        }
+        catch (Exception ex)
+        {
+            ConsoleLogger.Error($"Teammate '{name}' error: {ex.Message}");
+            UpdateMemberStatus(name, TeammateStatus.Idle);
+        }
+    }
+
+    /// <summary>
+    /// S11: 工作阶段 - 执行任务直到停止
+    /// </summary>
+    private bool WorkPhase(string name, string role, List<ChatMessage> messages)
+    {
+        var teammateSystemPrompt = BuildTeammateSystemPrompt(name, role);
+        
+        for (int i = 0; i < 50; i++) // 最多50轮
+        {
+            // 检查关闭标志
+            if (ShutdownFlags.GetValueOrDefault(name, false))
+            {
+                return false;
+            }
+            
+            // S11: 身份重注入 - 如果消息过短（说明发生了压缩），重新注入身份
+            if (messages.Count <= 3)
+            {
+                InjectIdentity(messages, name, role);
+            }
+            
+            // 读取收件箱
+            var inbox = MessageBus.ReadInbox(name);
+            if (inbox != "[]")
+            {
+                messages.Add(new ChatMessage
                 {
-                    new() { Role = "system", Content = teammateSystemPrompt }
-                };
-                requestMessages.AddRange(messages);
-                
-                // 检查是否有消息（没有则跳过）
-                if (inbox == "[]" && i > 0)
-                {
-                    // 等待新消息
-                    Thread.Sleep(1000);
-                    i--; // 不计数
-                    continue;
-                }
-                
-                var request = new ChatRequest
-                {
-                    Model = modelId!,
-                    Messages = requestMessages,
-                    MaxTokens = 2048,
-                    Tools = toolRegistry!.GetToolDefinitions()
-                };
-                
-                var response = client!.ChatAsync(request).Result;
-                var choice = response.Choices.FirstOrDefault();
-                
-                if (choice == null) break;
-                
-                var assistantMessage = choice.Message;
+                    Role = "user",
+                    Content = $"<inbox>\n{inbox}\n</inbox>"
+                });
                 messages.Add(new ChatMessage
                 {
                     Role = "assistant",
-                    Content = assistantMessage.Content,
-                    ToolCalls = assistantMessage.ToolCalls
+                    Content = "Noted inbox messages."
                 });
+            }
+            
+            // 构建请求
+            var requestMessages = new List<ChatMessage>
+            {
+                new() { Role = "system", Content = teammateSystemPrompt }
+            };
+            requestMessages.AddRange(messages);
+            
+            var request = new ChatRequest
+            {
+                Model = modelId!,
+                Messages = requestMessages,
+                MaxTokens = 2048,
+                Tools = toolRegistry!.GetToolDefinitions()
+            };
+            
+            var response = client!.ChatAsync(request).Result;
+            var choice = response.Choices.FirstOrDefault();
+            
+            if (choice == null) break;
+            
+            var assistantMessage = choice.Message;
+            messages.Add(new ChatMessage
+            {
+                Role = "assistant",
+                Content = assistantMessage.Content,
+                ToolCalls = assistantMessage.ToolCalls
+            });
+            
+            // 处理工具调用
+            if (assistantMessage.ToolCalls != null && assistantMessage.ToolCalls.Count > 0)
+            {
+                bool idleRequested = false;
                 
-                // 处理工具调用
-                if (assistantMessage.ToolCalls != null && assistantMessage.ToolCalls.Count > 0)
+                foreach (var toolCall in assistantMessage.ToolCalls)
                 {
-                    foreach (var toolCall in assistantMessage.ToolCalls)
+                    // S11: 检查是否请求进入空闲状态
+                    if (toolCall.Function?.Name == "idle")
+                    {
+                        idleRequested = true;
+                        messages.Add(new ChatMessage
+                        {
+                            Role = "tool",
+                            Content = "Entered idle state. Will poll for new tasks.",
+                            ToolCallId = toolCall.Id
+                        });
+                    }
+                    else
                     {
                         var result = ExecuteTeammateTool(name, toolCall);
                         messages.Add(new ChatMessage
@@ -231,21 +299,151 @@ public class TeammateManager
                         });
                     }
                 }
-                else if (assistantMessage.Content != null)
+                
+                // 如果调用了 idle 工具，返回进入空闲状态
+                if (idleRequested)
                 {
-                    // 没有工具调用，表示完成任务
-                    break;
+                    return true;
                 }
             }
-            
-            // 标记为空闲
-            UpdateMemberStatus(name, TeammateStatus.Idle);
+            else if (assistantMessage.Content != null)
+            {
+                // 没有工具调用，表示完成任务，进入空闲状态
+                return true;
+            }
         }
-        catch (Exception ex)
+        
+        return true; // 超过最大轮数，进入空闲状态
+    }
+
+    /// <summary>
+    /// S11: 空闲阶段轮询 - 检查收件箱和任务看板
+    /// </summary>
+    private bool IdlePoll(string name, string role, List<ChatMessage> messages)
+    {
+        int pollCount = IDLE_TIMEOUT / POLL_INTERVAL; // 60s / 5s = 12 次
+        
+        for (int i = 0; i < pollCount; i++)
         {
-            ConsoleLogger.Error($"Teammate '{name}' error: {ex.Message}");
-            UpdateMemberStatus(name, TeammateStatus.Idle);
+            // 检查关闭标志
+            if (ShutdownFlags.GetValueOrDefault(name, false))
+            {
+                return false;
+            }
+            
+            Thread.Sleep(POLL_INTERVAL * 1000);
+            
+            // 1. 检查收件箱
+            var inbox = MessageBus.ReadInbox(name);
+            if (inbox != "[]")
+            {
+                messages.Add(new ChatMessage
+                {
+                    Role = "user",
+                    Content = $"<inbox>\n{inbox}\n</inbox>"
+                });
+                ConsoleLogger.Info($"Teammate '{name}' received message, resuming work");
+                return true;
+            }
+            
+            // 2. S11: 扫描任务看板，自动认领未分配任务
+            if (taskManager != null)
+            {
+                var unclaimed = taskManager.GetReadyTasks();
+                if (unclaimed.Count > 0)
+                {
+                    var task = unclaimed[0];
+                    var claimResult = taskManager.Claim(task.Id, name);
+                    
+                    messages.Add(new ChatMessage
+                    {
+                        Role = "user",
+                        Content = $"<auto-claimed>Task #{task.Id}: {task.Subject}</auto-claimed>\n" +
+                                  $"You have automatically claimed this task. Start working on it now."
+                    });
+                    
+                    ConsoleLogger.Info($"Teammate '{name}' auto-claimed task #{task.Id}: {task.Subject}");
+                    return true;
+                }
+            }
         }
+        
+        // 超时
+        return false;
+    }
+
+    /// <summary>
+    /// S11: 构建队友系统提示
+    /// </summary>
+    private string BuildTeammateSystemPrompt(string name, string role)
+    {
+        return $"You are {name}, a {role} in a team. " +
+               "**IMPORTANT: You are on Windows. Use 'dir' instead of 'ls', 'type' instead of 'cat'.**\n" +
+               "You can receive messages from other teammates via your inbox. " +
+               "Use the 'send_message' tool to communicate with others. " +
+               "Use 'read_inbox' to check for new messages. " +
+               "Use 'shutdown_response' to respond to shutdown requests. " +
+               "Use 'plan_submit' to submit plans for approval.\n" +
+               "**S11 Autonomous Behavior:**\n" +
+               "- Use the 'idle' tool when you have no immediate work to enter idle state\n" +
+               "- While idle, you will automatically poll for new messages and tasks\n" +
+               "- You can auto-claim unclaimed tasks from the task board\n" +
+               "- Use 'claim_task' to manually claim a task by ID\n" +
+               "- After 60 seconds of idle with no work, you will auto-shutdown\n" +
+               "Work autonomously and report progress when asked.";
+    }
+
+    /// <summary>
+    /// S11: 身份重注入
+    /// </summary>
+    private void InjectIdentity(List<ChatMessage> messages, string name, string role)
+    {
+        // 在开头插入身份块
+        messages.Insert(0, new ChatMessage
+        {
+            Role = "user",
+            Content = $"<identity>You are '{name}', role: {role}, team: {Config.Leader}'s team. " +
+                      $"Continue your work. If you have no immediate task, use the 'idle' tool.</identity>"
+        });
+        messages.Insert(1, new ChatMessage
+        {
+            Role = "assistant",
+            Content = $"I am {name}. Continuing."
+        });
+    }
+
+    /// <summary>
+    /// S11: 进入空闲状态
+    /// </summary>
+    public string EnterIdle(string name)
+    {
+        var member = Config.Members.FirstOrDefault(m => m.Name == name);
+        if (member == null)
+        {
+            return $"Error: Teammate '{name}' not found";
+        }
+        
+        IdleFlags[name] = true;
+        return $"Teammate '{name}' entering idle state";
+    }
+
+    /// <summary>
+    /// S11: 手动认领任务
+    /// </summary>
+    public string ClaimTask(string name, int taskId)
+    {
+        if (taskManager == null)
+        {
+            return "Error: TaskManager not initialized";
+        }
+        
+        var member = Config.Members.FirstOrDefault(m => m.Name == name);
+        if (member == null)
+        {
+            return $"Error: Teammate '{name}' not found";
+        }
+        
+        return taskManager.Claim(taskId, name);
     }
 
     /// <summary>
@@ -259,6 +457,18 @@ public class TeammateManager
         var arguments = toolCall.Function.Arguments;
         
         ConsoleLogger.Tool($"{teammateName}/{toolName}", arguments);
+        
+        // S11: 特殊处理 idle 工具
+        if (toolName == "idle")
+        {
+            return EnterIdle(teammateName);
+        }
+        
+        // S11: 特殊处理 claim_task 工具
+        if (toolName == "claim_task")
+        {
+            return ExecuteClaimTask(teammateName, arguments);
+        }
         
         // 特殊处理团队相关工具
         if (toolName == "send_message")
@@ -277,11 +487,100 @@ public class TeammateManager
         {
             return ExecutePlanSubmit(teammateName, arguments);
         }
+        else if (toolName == "file_task")
+        {
+            // S11: 处理任务完成时更新 owner
+            return ExecuteFileTask(teammateName, arguments);
+        }
         
         // 其他工具由 toolRegistry 执行
         var result = toolRegistry!.ExecuteAsync(toolName, arguments).Result;
         ConsoleLogger.ToolResult(result);
         return result;
+    }
+
+    /// <summary>
+    /// S11: 执行认领任务
+    /// </summary>
+    private string ExecuteClaimTask(string teammateName, string argumentsJson)
+    {
+        try
+        {
+            var args = JsonSerializer.Deserialize<ClaimTaskArgs>(argumentsJson);
+            if (args == null || args.TaskId <= 0)
+            {
+                return "Error: 'task_id' is required and must be positive";
+            }
+            
+            return ClaimTask(teammateName, args.TaskId);
+        }
+        catch (Exception ex)
+        {
+            return $"Error: {ex.Message}";
+        }
+    }
+
+    private class ClaimTaskArgs
+    {
+        [System.Text.Json.Serialization.JsonPropertyName("task_id")]
+        public int TaskId { get; set; }
+    }
+
+    /// <summary>
+    /// S11: 执行文件任务工具（带 owner 更新）
+    /// </summary>
+    private string ExecuteFileTask(string teammateName, string argumentsJson)
+    {
+        try
+        {
+            var args = JsonSerializer.Deserialize<FileTaskArgs>(argumentsJson);
+            if (args == null || string.IsNullOrEmpty(args.Action))
+            {
+                return "Error: action is required";
+            }
+            
+            var action = args.Action.ToLowerInvariant();
+            
+            return action switch
+            {
+                "create" => taskManager!.Create(args.Subject ?? "", args.Description ?? ""),
+                "get" => args.TaskId > 0 ? taskManager!.Get(args.TaskId) : "Error: task_id is required",
+                "update" => args.TaskId > 0 
+                    ? taskManager!.Update(args.TaskId, args.Status, args.AddBlockedBy, args.AddBlocks) 
+                    : "Error: task_id is required",
+                "list" => taskManager!.ListAll(),
+                "claim" => args.TaskId > 0 
+                    ? taskManager!.Claim(args.TaskId, args.Owner ?? teammateName) 
+                    : "Error: task_id is required",
+                "unclaim" => args.TaskId > 0 ? taskManager!.Unclaim(args.TaskId) : "Error: task_id is required",
+                "delete" => args.TaskId > 0 ? taskManager!.Delete(args.TaskId) : "Error: task_id is required",
+                _ => $"Error: Unknown action '{action}'"
+            };
+        }
+        catch (Exception ex)
+        {
+            return $"Error: {ex.Message}";
+        }
+    }
+
+    private class FileTaskArgs
+    {
+        [System.Text.Json.Serialization.JsonPropertyName("action")]
+        public string? Action { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("task_id")]
+        public int TaskId { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("subject")]
+        public string? Subject { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("description")]
+        public string? Description { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("status")]
+        public string? Status { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("owner")]
+        public string? Owner { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("add_blocked_by")]
+        public List<int>? AddBlockedBy { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("add_blocks")]
+        public List<int>? AddBlocks { get; set; }
     }
 
     /// <summary>
@@ -402,7 +701,7 @@ public class TeammateManager
             var statusIcon = member.Status switch
             {
                 TeammateStatus.Working => "⏳",
-                TeammateStatus.Idle => "✅",
+                TeammateStatus.Idle => "💤",
                 TeammateStatus.Shutdown => "❌",
                 _ => "❓"
             };
