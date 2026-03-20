@@ -433,6 +433,119 @@ public class ToolRegistry
                 ["type"] = "object",
                 ["properties"] = new Dictionary<string, object>()
             },
+            // S12: Worktree 工具
+            "worktree_create" => new Dictionary<string, object>
+            {
+                ["type"] = "object",
+                ["properties"] = new Dictionary<string, object>
+                {
+                    ["name"] = new Dictionary<string, object>
+                    {
+                        ["type"] = "string",
+                        ["description"] = "Unique name for the worktree"
+                    },
+                    ["task_id"] = new Dictionary<string, object>
+                    {
+                        ["type"] = "integer",
+                        ["description"] = "Task ID to bind (auto-sets status to in_progress)"
+                    },
+                    ["base_branch"] = new Dictionary<string, object>
+                    {
+                        ["type"] = "string",
+                        ["description"] = "Base branch for the new worktree branch"
+                    }
+                },
+                ["required"] = new List<string> { "name" }
+            },
+            "worktree_exec" => new Dictionary<string, object>
+            {
+                ["type"] = "object",
+                ["properties"] = new Dictionary<string, object>
+                {
+                    ["name"] = new Dictionary<string, object>
+                    {
+                        ["type"] = "string",
+                        ["description"] = "Worktree name"
+                    },
+                    ["command"] = new Dictionary<string, object>
+                    {
+                        ["type"] = "string",
+                        ["description"] = "Command to execute in worktree directory"
+                    }
+                },
+                ["required"] = new List<string> { "name", "command" }
+            },
+            "worktree_keep" => new Dictionary<string, object>
+            {
+                ["type"] = "object",
+                ["properties"] = new Dictionary<string, object>
+                {
+                    ["name"] = new Dictionary<string, object>
+                    {
+                        ["type"] = "string",
+                        ["description"] = "Worktree name to mark as kept"
+                    }
+                },
+                ["required"] = new List<string> { "name" }
+            },
+            "worktree_remove" => new Dictionary<string, object>
+            {
+                ["type"] = "object",
+                ["properties"] = new Dictionary<string, object>
+                {
+                    ["name"] = new Dictionary<string, object>
+                    {
+                        ["type"] = "string",
+                        ["description"] = "Worktree name to remove"
+                    },
+                    ["force"] = new Dictionary<string, object>
+                    {
+                        ["type"] = "boolean",
+                        ["description"] = "Force removal"
+                    },
+                    ["complete_task"] = new Dictionary<string, object>
+                    {
+                        ["type"] = "boolean",
+                        ["description"] = "Mark bound task as completed"
+                    }
+                },
+                ["required"] = new List<string> { "name" }
+            },
+            "worktree_list" => new Dictionary<string, object>
+            {
+                ["type"] = "object",
+                ["properties"] = new Dictionary<string, object>()
+            },
+            "worktree_bind" => new Dictionary<string, object>
+            {
+                ["type"] = "object",
+                ["properties"] = new Dictionary<string, object>
+                {
+                    ["task_id"] = new Dictionary<string, object>
+                    {
+                        ["type"] = "integer",
+                        ["description"] = "Task ID to bind"
+                    },
+                    ["worktree"] = new Dictionary<string, object>
+                    {
+                        ["type"] = "string",
+                        ["description"] = "Worktree name to bind to"
+                    }
+                },
+                ["required"] = new List<string> { "task_id", "worktree" }
+            },
+            "worktree_events" => new Dictionary<string, object>
+            {
+                ["type"] = "object",
+                ["properties"] = new Dictionary<string, object>
+                {
+                    ["limit"] = new Dictionary<string, object>
+                    {
+                        ["type"] = "integer",
+                        ["description"] = "Max events to show (default 20)"
+                    }
+                }
+            },
             _ => new Dictionary<string, object>
             {
                 ["type"] = "object",

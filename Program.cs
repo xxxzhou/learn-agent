@@ -13,8 +13,8 @@ public class Program
         Console.OutputEncoding = Encoding.UTF8;
         Console.InputEncoding = Encoding.Unicode;
         
-        Console.WriteLine("=== Learn Agent - s11 Autonomous Agents ===");
-        Console.WriteLine("自治智能体 - 队友自动找活认领");
+        Console.WriteLine("=== Learn Agent - s12 Worktree Task Isolation ===");
+        Console.WriteLine("任务隔离 - 每个任务独立工作目录");
         Console.WriteLine();
 
         // 加载配置
@@ -52,6 +52,9 @@ public class Program
         // 创建队友管理器 (S9 智能体团队)
         var teammateManager = new TeammateManager(security.GetWorkDirectory());
         
+        // 创建 worktree 管理器 (S12 任务隔离)
+        var worktreeManager = new WorktreeManager(security.GetWorkDirectory(), taskManager);
+        
         // 创建工具注册表
         var toolRegistry = new ToolRegistry()
             .Register(new BashTool(security))
@@ -77,7 +80,15 @@ public class Program
             // S11 自治工具
             .Register(new IdleTool(teammateManager))
             .Register(new ClaimTaskTool(teammateManager))
-            .Register(new ScanTasksTool(taskManager));
+            .Register(new ScanTasksTool(taskManager))
+            // S12 Worktree 工具
+            .Register(new WorktreeCreateTool(worktreeManager))
+            .Register(new WorktreeExecTool(worktreeManager))
+            .Register(new WorktreeKeepTool(worktreeManager))
+            .Register(new WorktreeRemoveTool(worktreeManager))
+            .Register(new WorktreeListTool(worktreeManager))
+            .Register(new WorktreeBindTool(worktreeManager))
+            .Register(new WorktreeEventsTool(worktreeManager));
         
         // 创建客户端
         using var client = ClientFactory.Create(config);

@@ -357,4 +357,46 @@ public class TaskManager
         
         return (pending, inProgress, completed);
     }
+
+    // ==================== S12: Worktree 绑定 ====================
+
+    /// <summary>
+    /// S12: 绑定任务到 worktree
+    /// </summary>
+    public void BindWorktree(int taskId, string worktreeName)
+    {
+        var task = LoadTask(taskId);
+        if (task == null) return;
+        
+        task.Worktree = worktreeName;
+        
+        // 如果任务是 pending 状态，自动推进到 in_progress
+        if (task.Status == FileTaskStatus.Pending)
+        {
+            task.Status = FileTaskStatus.InProgress;
+        }
+        
+        SaveTask(task);
+    }
+
+    /// <summary>
+    /// S12: 解绑任务的 worktree
+    /// </summary>
+    public void UnbindWorktree(int taskId)
+    {
+        var task = LoadTask(taskId);
+        if (task == null) return;
+        
+        task.Worktree = "";
+        SaveTask(task);
+    }
+
+    /// <summary>
+    /// S12: 获取任务关联的 worktree 名称
+    /// </summary>
+    public string? GetWorktree(int taskId)
+    {
+        var task = LoadTask(taskId);
+        return task?.Worktree;
+    }
 }

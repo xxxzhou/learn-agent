@@ -62,4 +62,10 @@ public class TaskItem
     /// 更新时间
     /// </summary>
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+
+    // S12: Worktree 绑定
+    /// <summary>
+    /// S12: 关联的 worktree 名称
+    /// </summary>
+    public string Worktree { get; set; } = "";
 }
