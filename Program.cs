@@ -13,8 +13,8 @@ public class Program
         Console.OutputEncoding = Encoding.UTF8;
         Console.InputEncoding = Encoding.Unicode;
         
-        Console.WriteLine("=== Learn Agent - s08 Background Tasks ===");
-        Console.WriteLine("后台任务 - 非阻塞执行，模型继续思考");
+        Console.WriteLine("=== Learn Agent - s09 Agent Teams ===");
+        Console.WriteLine("智能体团队 - 多个模型协作工作");
         Console.WriteLine();
 
         // 加载配置
@@ -49,6 +49,9 @@ public class Program
         // 创建后台任务管理器 (S8 后台任务系统)
         var backgroundManager = new BackgroundManager(security.GetWorkDirectory());
         
+        // 创建队友管理器 (S9 智能体团队)
+        var teammateManager = new TeammateManager(security.GetWorkDirectory());
+        
         // 创建工具注册表
         var toolRegistry = new ToolRegistry()
             .Register(new BashTool(security))
@@ -59,10 +62,19 @@ public class Program
             .Register(new FileTaskTool(taskManager))
             .Register(new BackgroundTool(backgroundManager))
             .Register(new BackgroundCheckTool(backgroundManager))
-            .Register(new BackgroundListTool(backgroundManager));
+            .Register(new BackgroundListTool(backgroundManager))
+            .Register(new SpawnTool(teammateManager))
+            .Register(new SendMessageTool(teammateManager))
+            .Register(new BroadcastTool(teammateManager))
+            .Register(new ReadInboxTool(teammateManager))
+            .Register(new TeamStatusTool(teammateManager))
+            .Register(new ShutdownTeammateTool(teammateManager));
         
         // 创建客户端
         using var client = ClientFactory.Create(config);
+        
+        // 设置队友管理器依赖
+        teammateManager.SetDependencies(client, toolRegistry, config.ModelId);
         
         // 创建子代理服务
         var subagentService = new SubagentService(
@@ -102,7 +114,15 @@ public class Program
             "   - background_check(task_id=\"abc12345\") - Check task status\n" +
             "   - background_list() - List all background tasks\n" +
             "   - Results are automatically injected before the next LLM call\n" +
-            "8. Do NOT repeat the same action multiple times.";
+            "8. Use team tools for multi-agent collaboration:\n" +
+            "   - teammate_spawn(name=\"alice\", role=\"coder\", prompt=\"task description\") - Spawn a teammate\n" +
+            "   - send_message(recipient=\"alice\", content=\"message\") - Send message to teammate\n" +
+            "   - broadcast(content=\"status update\") - Broadcast to all teammates\n" +
+            "   - read_inbox(name=\"lead\") - Read your inbox\n" +
+            "   - team_status() - Get team roster\n" +
+            "   - teammate_shutdown(name=\"alice\") - Shutdown a teammate\n" +
+            "   - Teammates run in parallel threads with their own context\n" +
+            "9. Do NOT repeat the same action multiple times.";
         
         // 创建 Agent 服务
         var agent = new AgentService(client, toolRegistry, config.ModelId, systemPrompt);

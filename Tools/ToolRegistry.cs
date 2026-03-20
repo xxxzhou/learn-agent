@@ -222,6 +222,106 @@ public class ToolRegistry
                 ["type"] = "object",
                 ["properties"] = new Dictionary<string, object>()
             },
+            "teammate_spawn" => new Dictionary<string, object>
+            {
+                ["type"] = "object",
+                ["properties"] = new Dictionary<string, object>
+                {
+                    ["name"] = new Dictionary<string, object>
+                    {
+                        ["type"] = "string",
+                        ["description"] = "Unique name for the teammate"
+                    },
+                    ["role"] = new Dictionary<string, object>
+                    {
+                        ["type"] = "string",
+                        ["description"] = "Role description (e.g., 'coder', 'tester', 'reviewer')"
+                    },
+                    ["prompt"] = new Dictionary<string, object>
+                    {
+                        ["type"] = "string",
+                        ["description"] = "Initial task or instruction for the teammate"
+                    },
+                    ["mode"] = new Dictionary<string, object>
+                    {
+                        ["type"] = "string",
+                        ["description"] = "Permission mode: default, acceptEdits, bypassPermissions, plan"
+                    }
+                },
+                ["required"] = new List<string> { "name", "role" }
+            },
+            "send_message" => new Dictionary<string, object>
+            {
+                ["type"] = "object",
+                ["properties"] = new Dictionary<string, object>
+                {
+                    ["recipient"] = new Dictionary<string, object>
+                    {
+                        ["type"] = "string",
+                        ["description"] = "Name of the teammate to send message to"
+                    },
+                    ["content"] = new Dictionary<string, object>
+                    {
+                        ["type"] = "string",
+                        ["description"] = "Message content"
+                    },
+                    ["sender"] = new Dictionary<string, object>
+                    {
+                        ["type"] = "string",
+                        ["description"] = "Sender name (default: 'lead')"
+                    }
+                },
+                ["required"] = new List<string> { "recipient", "content" }
+            },
+            "broadcast" => new Dictionary<string, object>
+            {
+                ["type"] = "object",
+                ["properties"] = new Dictionary<string, object>
+                {
+                    ["content"] = new Dictionary<string, object>
+                    {
+                        ["type"] = "string",
+                        ["description"] = "Message content to broadcast to all teammates"
+                    },
+                    ["summary"] = new Dictionary<string, object>
+                    {
+                        ["type"] = "string",
+                        ["description"] = "Short summary of the message"
+                    }
+                },
+                ["required"] = new List<string> { "content" }
+            },
+            "read_inbox" => new Dictionary<string, object>
+            {
+                ["type"] = "object",
+                ["properties"] = new Dictionary<string, object>
+                {
+                    ["name"] = new Dictionary<string, object>
+                    {
+                        ["type"] = "string",
+                        ["description"] = "Name to check inbox for (default: 'lead' for leader)"
+                    }
+                },
+                ["required"] = new List<string>()
+            },
+            "team_status" => new Dictionary<string, object>
+            {
+                ["type"] = "object",
+                ["properties"] = new Dictionary<string, object>()
+            },
+            "teammate_shutdown" => new Dictionary<string, object>
+            {
+                ["type"] = "object",
+                ["properties"] = new Dictionary<string, object>
+                {
+                    ["name"] = new Dictionary<string, object>
+                    {
+                        ["type"] = "string",
+                        ["description"] = "Name of the teammate to shutdown"
+                    }
+                },
+                ["required"] = new List<string> { "name" }
+            },
             _ => new Dictionary<string, object>
             {
                 ["type"] = "object",
