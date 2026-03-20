@@ -14,6 +14,7 @@ namespace LearnAgent.Services;
 /// - 管理队友生命周期
 /// - 运行队友的 agent loop
 /// - 协调队友间通信
+/// - S10: 关机协议和计划审批
 /// </summary>
 public class TeammateManager
 {
@@ -23,6 +24,10 @@ public class TeammateManager
     private readonly MessageBus MessageBus;
     private readonly ConcurrentDictionary<string, Thread> Threads = new();
     private readonly ConcurrentDictionary<string, bool> ShutdownFlags = new();
+    
+    // S10: 协调请求追踪
+    private readonly ConcurrentDictionary<string, CoordinationRequest> ShutdownRequests = new();
+    private readonly ConcurrentDictionary<string, CoordinationRequest> PlanRequests = new();
     
     // 需要外部注入的依赖
     private ILLMClient? client;
@@ -88,11 +93,6 @@ public class TeammateManager
     /// <summary>
     /// 创建队友
     /// </summary>
-    /// <param name="name">队友名称</param>
-    /// <param name="role">角色</param>
-    /// <param name="prompt">初始提示</param>
-    /// <param name="mode">权限模式</param>
-    /// <returns>创建结果</returns>
     public string Spawn(string name, string role, string prompt, string mode = "default")
     {
         if (client == null || toolRegistry == null || modelId == null)
@@ -147,9 +147,12 @@ public class TeammateManager
             };
             
             var teammateSystemPrompt = $"You are {name}, a {role} in a team. " +
+                "**IMPORTANT: You are on Windows. Use 'dir' instead of 'ls', 'type' instead of 'cat'.** " +
                 "You can receive messages from other teammates via your inbox. " +
                 "Use the 'send_message' tool to communicate with others. " +
                 "Use 'read_inbox' to check for new messages. " +
+                "Use 'shutdown_response' to respond to shutdown requests. " +
+                "Use 'plan_submit' to submit plans for approval. " +
                 "Work autonomously and report progress when asked.";
             
             for (int i = 0; i < 50; i++) // 最多50轮
@@ -266,6 +269,14 @@ public class TeammateManager
         {
             return MessageBus.ReadInbox(teammateName);
         }
+        else if (toolName == "shutdown_response")
+        {
+            return ExecuteShutdownResponse(teammateName, arguments);
+        }
+        else if (toolName == "plan_submit")
+        {
+            return ExecutePlanSubmit(teammateName, arguments);
+        }
         
         // 其他工具由 toolRegistry 执行
         var result = toolRegistry!.ExecuteAsync(toolName, arguments).Result;
@@ -283,7 +294,7 @@ public class TeammateManager
             var args = JsonSerializer.Deserialize<SendMessageArgs>(argumentsJson);
             if (args == null) return "Error: Invalid arguments";
             
-            return MessageBus.Send(sender, args.Recipient, args.Content, args.Type ?? MessageType.Message);
+            return MessageBus.Send(sender, args.Recipient ?? "", args.Content ?? "", args.Type ?? MessageType.Message);
         }
         catch (Exception ex)
         {
@@ -299,6 +310,68 @@ public class TeammateManager
         public string? Content { get; set; }
         [System.Text.Json.Serialization.JsonPropertyName("type")]
         public string? Type { get; set; }
+    }
+
+    /// <summary>
+    /// 执行关机响应
+    /// </summary>
+    private string ExecuteShutdownResponse(string sender, string argumentsJson)
+    {
+        try
+        {
+            var args = JsonSerializer.Deserialize<ShutdownResponseArgs>(argumentsJson);
+            if (args == null || string.IsNullOrEmpty(args.RequestId))
+            {
+                return "Error: 'request_id' is required";
+            }
+            
+            return SendShutdownResponse(sender, "lead", args.Approve, args.RequestId, args.Reason);
+        }
+        catch (Exception ex)
+        {
+            return $"Error: {ex.Message}";
+        }
+    }
+
+    private class ShutdownResponseArgs
+    {
+        [System.Text.Json.Serialization.JsonPropertyName("request_id")]
+        public string? RequestId { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("approve")]
+        public bool Approve { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("reason")]
+        public string? Reason { get; set; }
+    }
+
+    /// <summary>
+    /// 执行计划提交
+    /// </summary>
+    private string ExecutePlanSubmit(string sender, string argumentsJson)
+    {
+        try
+        {
+            var args = JsonSerializer.Deserialize<PlanSubmitArgs>(argumentsJson);
+            if (args == null || string.IsNullOrEmpty(args.Plan))
+            {
+                return "Error: 'plan' is required";
+            }
+            
+            return SubmitPlan(sender, args.Recipient ?? "lead", args.Plan, args.Summary);
+        }
+        catch (Exception ex)
+        {
+            return $"Error: {ex.Message}";
+        }
+    }
+
+    private class PlanSubmitArgs
+    {
+        [System.Text.Json.Serialization.JsonPropertyName("recipient")]
+        public string? Recipient { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("plan")]
+        public string? Plan { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("summary")]
+        public string? Summary { get; set; }
     }
 
     /// <summary>
@@ -375,7 +448,7 @@ public class TeammateManager
     }
 
     /// <summary>
-    /// 关闭队友
+    /// 关闭队友（强制）
     /// </summary>
     public string Shutdown(string name)
     {
@@ -420,5 +493,187 @@ public class TeammateManager
     public MessageBus GetMessageBus()
     {
         return MessageBus;
+    }
+    
+    // ==================== S10 Coordination Protocol ====================
+    
+    /// <summary>
+    /// 协调请求
+    /// </summary>
+    private class CoordinationRequest
+    {
+        public string RequestId { get; set; } = "";
+        public string From { get; set; } = "";
+        public string To { get; set; } = "";
+        public string Content { get; set; } = "";
+        public string Status { get; set; } = "pending";  // pending, approved, rejected
+        public DateTime CreatedAt { get; set; }
+    }
+    
+    /// <summary>
+    /// 发送关机请求 (领导 -> 队友)
+    /// </summary>
+    public string SendShutdownRequest(string sender, string recipient, string reason)
+    {
+        var member = Config.Members.FirstOrDefault(m => m.Name == recipient);
+        if (member == null)
+        {
+            return $"Error: Teammate '{recipient}' not found";
+        }
+        
+        var requestId = Guid.NewGuid().ToString()[..8];
+        
+        var request = new CoordinationRequest
+        {
+            RequestId = requestId,
+            From = sender,
+            To = recipient,
+            Content = reason,
+            Status = "pending",
+            CreatedAt = DateTime.UtcNow
+        };
+        
+        ShutdownRequests[requestId] = request;
+        
+        // 通过消息总线发送请求
+        MessageBus.Send(sender, recipient, reason, MessageType.Shutdown, new Dictionary<string, object>
+        {
+            ["request_id"] = requestId
+        });
+        
+        return $"Shutdown request sent to '{recipient}' (request_id: {requestId})";
+    }
+    
+    /// <summary>
+    /// 发送关机响应 (队友 -> 领导)
+    /// </summary>
+    public string SendShutdownResponse(string sender, string recipient, bool approve, string requestId, string? reason = null)
+    {
+        if (!ShutdownRequests.TryGetValue(requestId, out var request))
+        {
+            return $"Error: Request '{requestId}' not found";
+        }
+        
+        request.Status = approve ? "approved" : "rejected";
+        
+        // 通过消息总线发送响应
+        MessageBus.Send(sender, recipient, reason ?? "", MessageType.ShutdownResponse, new Dictionary<string, object>
+        {
+            ["request_id"] = requestId,
+            ["approve"] = approve
+        });
+        
+        // 如果批准，设置关闭标志
+        if (approve)
+        {
+            ShutdownFlags[sender] = true;
+        }
+        
+        return $"Shutdown response sent: {(approve ? "approved" : "rejected")}";
+    }
+    
+    /// <summary>
+    /// 提交计划 (队友 -> 领导)
+    /// </summary>
+    public string SubmitPlan(string sender, string recipient, string plan, string? summary = null)
+    {
+        var requestId = Guid.NewGuid().ToString()[..8];
+        
+        var request = new CoordinationRequest
+        {
+            RequestId = requestId,
+            From = sender,
+            To = recipient,
+            Content = plan,
+            Status = "pending",
+            CreatedAt = DateTime.UtcNow
+        };
+        
+        PlanRequests[requestId] = request;
+        
+        // 通过消息总线发送计划请求
+        MessageBus.Send(sender, recipient, plan, MessageType.PlanApproval, new Dictionary<string, object>
+        {
+            ["request_id"] = requestId,
+            ["summary"] = summary ?? plan[..Math.Min(50, plan.Length)]
+        });
+        
+        return $"Plan submitted (request_id: {requestId})";
+    }
+    
+    /// <summary>
+    /// 审批计划 (领导 -> 队友)
+    /// </summary>
+    public string ReviewPlan(string requestId, bool approve, string feedback)
+    {
+        if (!PlanRequests.TryGetValue(requestId, out var request))
+        {
+            return $"Error: Request '{requestId}' not found";
+        }
+        
+        request.Status = approve ? "approved" : "rejected";
+        
+        // 通过消息总线发送审批响应
+        MessageBus.Send(request.To, request.From, feedback, MessageType.PlanApprovalResponse, new Dictionary<string, object>
+        {
+            ["request_id"] = requestId,
+            ["approve"] = approve
+        });
+        
+        return $"Plan {(approve ? "approved" : "rejected")} (request_id: {requestId})";
+    }
+    
+    /// <summary>
+    /// 获取请求状态
+    /// </summary>
+    public string GetRequestStatus(string requestId)
+    {
+        if (ShutdownRequests.TryGetValue(requestId, out var shutdownReq))
+        {
+            return $"Shutdown request {requestId}: {shutdownReq.Status}";
+        }
+        
+        if (PlanRequests.TryGetValue(requestId, out var planReq))
+        {
+            return $"Plan request {requestId}: {planReq.Status}";
+        }
+        
+        return $"Request {requestId} not found";
+    }
+    
+    /// <summary>
+    /// 列出待处理的请求
+    /// </summary>
+    public string ListPendingRequests()
+    {
+        var lines = new List<string>();
+        
+        var pendingShutdowns = ShutdownRequests.Values.Where(r => r.Status == "pending").ToList();
+        var pendingPlans = PlanRequests.Values.Where(r => r.Status == "pending").ToList();
+        
+        if (pendingShutdowns.Count == 0 && pendingPlans.Count == 0)
+        {
+            return "No pending requests.";
+        }
+        
+        if (pendingShutdowns.Count > 0)
+        {
+            lines.Add("Pending Shutdown Requests:");
+            foreach (var req in pendingShutdowns)
+            {
+                lines.Add($"  [{req.RequestId}] {req.From} -> {req.To}: {req.Content[..Math.Min(50, req.Content.Length)]}");
+            }
+        }
+        
+        if (pendingPlans.Count > 0)
+        {
+            lines.Add("Pending Plan Requests:");
+            foreach (var req in pendingPlans)
+            {
+                lines.Add($"  [{req.RequestId}] {req.From} -> {req.To}: {req.Content[..Math.Min(50, req.Content.Length)]}");
+            }
+        }
+        
+        return string.Join("\n", lines);
     }
 }

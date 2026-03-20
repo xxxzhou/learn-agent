@@ -68,7 +68,12 @@ public class Program
             .Register(new BroadcastTool(teammateManager))
             .Register(new ReadInboxTool(teammateManager))
             .Register(new TeamStatusTool(teammateManager))
-            .Register(new ShutdownTeammateTool(teammateManager));
+            .Register(new ShutdownTeammateTool(teammateManager))
+            // S10 协调工具
+            .Register(new ShutdownRequestTool(teammateManager))
+            .Register(new ShutdownResponseTool(teammateManager))
+            .Register(new PlanSubmitTool(teammateManager))
+            .Register(new PlanReviewTool(teammateManager));
         
         // 创建客户端
         using var client = ClientFactory.Create(config);
