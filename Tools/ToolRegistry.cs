@@ -191,6 +191,37 @@ public class ToolRegistry
                 },
                 ["required"] = new List<string> { "action" }
             },
+            "background_run" => new Dictionary<string, object>
+            {
+                ["type"] = "object",
+                ["properties"] = new Dictionary<string, object>
+                {
+                    ["command"] = new Dictionary<string, object>
+                    {
+                        ["type"] = "string",
+                        ["description"] = "The shell command to run in the background (non-blocking)"
+                    }
+                },
+                ["required"] = new List<string> { "command" }
+            },
+            "background_check" => new Dictionary<string, object>
+            {
+                ["type"] = "object",
+                ["properties"] = new Dictionary<string, object>
+                {
+                    ["task_id"] = new Dictionary<string, object>
+                    {
+                        ["type"] = "string",
+                        ["description"] = "The background task ID to check"
+                    }
+                },
+                ["required"] = new List<string> { "task_id" }
+            },
+            "background_list" => new Dictionary<string, object>
+            {
+                ["type"] = "object",
+                ["properties"] = new Dictionary<string, object>()
+            },
             _ => new Dictionary<string, object>
             {
                 ["type"] = "object",

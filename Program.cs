@@ -13,8 +13,8 @@ public class Program
         Console.OutputEncoding = Encoding.UTF8;
         Console.InputEncoding = Encoding.Unicode;
         
-        Console.WriteLine("=== Learn Agent - s06 Context Compact ===");
-        Console.WriteLine("上下文压缩 - 无限会话");
+        Console.WriteLine("=== Learn Agent - s08 Background Tasks ===");
+        Console.WriteLine("后台任务 - 非阻塞执行，模型继续思考");
         Console.WriteLine();
 
         // 加载配置
@@ -46,6 +46,9 @@ public class Program
         // 创建任务管理器 (S7 持久化任务系统)
         var taskManager = new TaskManager(security.GetWorkDirectory());
         
+        // 创建后台任务管理器 (S8 后台任务系统)
+        var backgroundManager = new BackgroundManager(security.GetWorkDirectory());
+        
         // 创建工具注册表
         var toolRegistry = new ToolRegistry()
             .Register(new BashTool(security))
@@ -53,7 +56,10 @@ public class Program
             .Register(new WriteFileTool(security))
             .Register(new TodoTool(todoManager))
             .Register(new LoadSkillTool(skillLoader))
-            .Register(new FileTaskTool(taskManager));
+            .Register(new FileTaskTool(taskManager))
+            .Register(new BackgroundTool(backgroundManager))
+            .Register(new BackgroundCheckTool(backgroundManager))
+            .Register(new BackgroundListTool(backgroundManager));
         
         // 创建客户端
         using var client = ClientFactory.Create(config);
@@ -91,7 +97,12 @@ public class Program
             "   - file_task(action=\"claim\", task_id=1, owner=\"agent\") - Claim a task\n" +
             "   - file_task(action=\"update\", task_id=1, add_blocked_by=[2]) - Add dependency\n" +
             "   - Tasks are stored in .tasks/ directory and persist across sessions\n" +
-            "7. Do NOT repeat the same action multiple times.";
+            "7. Use 'background_run' for long-running commands (npm install, pytest, docker build):\n" +
+            "   - background_run(command=\"npm install\") - Run in background, returns task_id\n" +
+            "   - background_check(task_id=\"abc12345\") - Check task status\n" +
+            "   - background_list() - List all background tasks\n" +
+            "   - Results are automatically injected before the next LLM call\n" +
+            "8. Do NOT repeat the same action multiple times.";
         
         // 创建 Agent 服务
         var agent = new AgentService(client, toolRegistry, config.ModelId, systemPrompt);
@@ -100,11 +111,14 @@ public class Program
         var compressor = new ContextCompressor(client, security.GetWorkDirectory(), config.ModelId);
         agent.SetCompressor(compressor);
         
+        // 设置后台任务管理器
+        agent.SetBackgroundManager(backgroundManager);
+        
         // 交互式循环
         while (true)
         {
             Console.ForegroundColor = ConsoleColor.Cyan;
-            Console.Write("s06 >> ");
+            Console.Write("s08 >> ");
             Console.ResetColor();
             
             var input = Console.ReadLine();            

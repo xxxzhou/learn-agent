@@ -75,15 +75,15 @@ public class OpenAIClient : ILLMClient
         if (request.Messages != null && request.Messages.Count > 0)
         {
             var msgCount = request.Messages.Count;
-            var showCount = Math.Min(3, msgCount);
+            // 只显示最后一条消息
+            var showCount = 1;
             ConsoleLogger.RequestSummary(request.Model, msgCount, showCount);
             
-            for (int i = msgCount - showCount; i < msgCount; i++)
-            {
-                var msg = request.Messages[i];
-                var contentPreview = msg.Content?.ToString() ?? "";
-                ConsoleLogger.Message(msg.Role, contentPreview, i);
-            }
+            // 只显示最后一条消息
+            var lastIndex = msgCount - 1;
+            var lastMsg = request.Messages[lastIndex];
+            var contentPreview = lastMsg.Content?.ToString() ?? "";
+            ConsoleLogger.Message(lastMsg.Role, contentPreview, lastIndex);
         }
         
         var endpoint = customEndpoint ?? "/v1/chat/completions";

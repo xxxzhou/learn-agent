@@ -177,7 +177,7 @@ public static class ConsoleLogger
         Console.ForegroundColor = ConsoleColor.White;
         Console.Write(messageCount);
         Console.ForegroundColor = ConsoleColor.DarkGray;
-        Console.WriteLine($" (显示最后{showCount}条)");
+        Console.WriteLine($" (最后1条)");
         Console.ResetColor();
     }
     

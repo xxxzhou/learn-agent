@@ -15,6 +15,7 @@ public class AgentService
     private readonly List<ChatMessage> messages;
     private readonly string? systemPrompt;
     private ContextCompressor? compressor;
+    private BackgroundManager? backgroundManager;
     
     // Nag reminder: 追踪未更新 todo 的轮数
     private int roundsSinceTodo = 0;
@@ -41,6 +42,14 @@ public class AgentService
     public void SetCompressor(ContextCompressor compressor)
     {
         this.compressor = compressor;
+    }
+    
+    /// <summary>
+    /// 设置后台任务管理器
+    /// </summary>
+    public void SetBackgroundManager(BackgroundManager backgroundManager)
+    {
+        this.backgroundManager = backgroundManager;
     }
     
     /// <summary>
@@ -92,6 +101,30 @@ public class AgentService
         
         while (true)
         {
+            // 排空后台任务通知队列（在每次 LLM 调用前注入）
+            if (backgroundManager != null)
+            {
+                var notifications = backgroundManager.DrainNotifications();
+                if (notifications.Count > 0)
+                {
+                    var notifText = string.Join("\n", notifications.Select(n =>
+                        $"[bg:{n.TaskId}] {n.Status}\n" +
+                        $"Command: {n.Command}\n" +
+                        $"Output: {(n.Output?.Length > 500 ? n.Output[..500] + "..." : n.Output ?? "")}"));
+                    
+                    messages.Add(new ChatMessage
+                    {
+                        Role = "user",
+                        Content = $"<background-results>\n{notifText}\n</background-results>"
+                    });
+                    messages.Add(new ChatMessage
+                    {
+                        Role = "assistant",
+                        Content = "Noted background results."
+                    });
+                }
+            }
+            
             // Layer 1: micro_compact - 每次调用前静默执行
             if (compressor != null)
             {
